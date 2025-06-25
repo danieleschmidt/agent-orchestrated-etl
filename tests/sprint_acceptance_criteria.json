@@ -1,0 +1,37 @@
+{
+  "epic": "Intelligent DAG generation based on data source analysis",
+  "tasks": [
+    {
+      "id": 1,
+      "task": "Design data source analysis module",
+      "acceptance_criteria": [
+        "Module returns metadata about tables and fields for S3 and PostgreSQL sources",
+        "Raises ValueError when the source type is unsupported"
+      ]
+    },
+    {
+      "id": 2,
+      "task": "Generate Airflow DAG from metadata",
+      "acceptance_criteria": [
+        "DAG object contains extract, transform, and load tasks",
+        "Tasks have correct upstream/downstream dependencies"
+      ]
+    },
+    {
+      "id": 3,
+      "task": "Add CLI command `generate_dag`",
+      "acceptance_criteria": [
+        "CLI accepts data source argument and outputs DAG python file",
+        "CLI exits with an error message on invalid input"
+      ]
+    },
+    {
+      "id": 4,
+      "task": "Write unit tests for DAG generation",
+      "acceptance_criteria": [
+        "Tests verify DAG structure for S3 and PostgreSQL examples",
+        "Tests assert proper errors for unsupported sources"
+      ]
+    }
+  ]
+}

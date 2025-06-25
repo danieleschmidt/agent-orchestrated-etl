@@ -1,0 +1,44 @@
+import subprocess  # nosec B404
+import sys
+import os
+from pathlib import Path
+
+
+def test_cli_outputs_dag_file(tmp_path):
+    out_file = tmp_path / "dag.py"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_orchestrated_etl.cli",
+            "s3",
+            str(out_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )  # nosec B603
+    assert result.returncode == 0  # nosec B101
+    assert out_file.exists() and out_file.read_text() != ""  # nosec B101
+
+
+def test_cli_invalid_source(tmp_path):
+    out_file = tmp_path / "dag.py"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_orchestrated_etl.cli",
+            "mongodb",
+            str(out_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )  # nosec B603
+    assert result.returncode != 0  # nosec B101
+    assert "Unsupported source type" in result.stderr  # nosec B101
