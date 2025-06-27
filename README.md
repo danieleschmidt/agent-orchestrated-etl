@@ -25,14 +25,29 @@ airflow webserver --port 8080
 
 ## Usage
 ```python
-from agent_etl import DataOrchestrator
+from agent_orchestrated_etl import DataOrchestrator
 
-orchestrator = DataOrchestrator()
-pipeline = orchestrator.create_pipeline(
+orch = DataOrchestrator()
+pipeline = orch.create_pipeline(
     source="s3://my-bucket/data/",
-    target="postgresql://localhost/warehouse"
 )
 pipeline.execute()
+
+# override the load step
+custom_pipeline = orch.create_pipeline(
+    source="s3://my-bucket/data/",
+    operations={"load": lambda data: print("loaded", data)},
+)
+custom_pipeline.execute()
+```
+
+You can also execute a pipeline via the CLI. Add `--list-tasks` to preview the
+execution order without running any steps:
+
+```bash
+run_pipeline s3 --output results.json --airflow dag.py --dag-id my_dag
+run_pipeline s3 --list-tasks
+generate_dag s3 dag.py --list-tasks
 ```
 
 ## Roadmap
