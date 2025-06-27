@@ -13,3 +13,4 @@ packages = ["agent_orchestrated_etl"]
 
 [project.scripts]
 generate_dag = "agent_orchestrated_etl.cli:main"
+run_pipeline = "agent_orchestrated_etl.cli:run_pipeline_cmd"
