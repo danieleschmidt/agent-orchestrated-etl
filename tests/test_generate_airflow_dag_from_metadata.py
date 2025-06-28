@@ -9,6 +9,13 @@ def test_dag_contains_required_tasks():
     assert {'extract', 'transform', 'load'} <= set(dag.tasks.keys())  # nosec B101
 
 
+def test_dag_generated_for_api_source():
+    """API sources produce a DAG with standard tasks."""
+    metadata = data_source_analysis.analyze_source('api')
+    dag = dag_generator.generate_dag(metadata)
+    assert {'extract', 'transform', 'load'} <= set(dag.tasks.keys())  # nosec B101
+
+
 def test_task_dependencies():
     """Tasks have correct upstream/downstream dependencies"""
     metadata = data_source_analysis.analyze_source('s3')

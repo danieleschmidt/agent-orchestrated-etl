@@ -3,6 +3,8 @@ import sys
 import os
 from pathlib import Path
 
+from agent_orchestrated_etl import cli
+
 
 def test_cli_outputs_dag_file(tmp_path):
     out_file = tmp_path / "dag.py"
@@ -14,6 +16,27 @@ def test_cli_outputs_dag_file(tmp_path):
             "-m",
             "agent_orchestrated_etl.cli",
             "s3",
+            str(out_file),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )  # nosec B603
+    assert result.returncode == 0  # nosec B101
+    assert out_file.exists() and out_file.read_text() != ""  # nosec B101
+
+
+def test_cli_outputs_dag_file_api(tmp_path):
+    """generate_dag supports the 'api' source."""
+    out_file = tmp_path / "dag.py"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "agent_orchestrated_etl.cli",
+            "api",
             str(out_file),
         ],
         capture_output=True,
@@ -88,3 +111,12 @@ def test_cli_list_tasks(tmp_path):
     assert result.returncode == 0  # nosec B101
     assert "extract" in result.stdout  # nosec B101
     assert not out_file.exists()  # nosec B101
+
+
+def test_cli_list_sources(capsys):
+    """--list-sources prints supported data sources."""
+    exit_code = cli.generate_dag_cmd(["--list-sources"])
+    assert exit_code == 0  # nosec B101
+    out = capsys.readouterr().out
+    for src in ("s3", "postgresql", "api"):
+        assert src in out  # nosec B101

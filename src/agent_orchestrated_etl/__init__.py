@@ -1,7 +1,7 @@
 """Agent-Orchestrated ETL package."""
 
 from . import config, core, data_source_analysis, dag_generator, cli, orchestrator
-from .orchestrator import DataOrchestrator, Pipeline
+from .orchestrator import DataOrchestrator, Pipeline, MonitorAgent
 
 __all__ = [
     "config",
@@ -12,4 +12,5 @@ __all__ = [
     "orchestrator",
     "DataOrchestrator",
     "Pipeline",
+    "MonitorAgent",
 ]
