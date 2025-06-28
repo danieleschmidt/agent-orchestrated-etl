@@ -39,15 +39,28 @@ custom_pipeline = orch.create_pipeline(
     operations={"load": lambda data: print("loaded", data)},
 )
 custom_pipeline.execute()
+
+# create a pipeline from a REST API
+api_pipeline = orch.create_pipeline(
+    source="api://example.com/endpoint",
+)
+api_pipeline.execute()
 ```
 
 You can also execute a pipeline via the CLI. Add `--list-tasks` to preview the
-execution order without running any steps:
+execution order without running any steps. Use `--list-sources` to see the
+supported data sources. Pass `--monitor` with a file path to capture task
+events. Logs are appended to the file as each step runs. Monitor logs are
+written even if pipeline creation or execution fails, and the command will exit
+with code ``1`` on errors:
 
 ```bash
 run_pipeline s3 --output results.json --airflow dag.py --dag-id my_dag
 run_pipeline s3 --list-tasks
 generate_dag s3 dag.py --list-tasks
+generate_dag --list-sources
+run_pipeline --list-sources
+run_pipeline s3 --monitor events.log
 ```
 
 ## Roadmap
