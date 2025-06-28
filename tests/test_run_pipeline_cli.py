@@ -1,4 +1,4 @@
-from agent_orchestrated_etl import cli
+from agent_orchestrated_etl import cli, orchestrator
 
 
 def test_run_pipeline_cmd(capsys):
@@ -8,6 +8,14 @@ def test_run_pipeline_cmd(capsys):
     out = capsys.readouterr().out
     assert '"extract"' in out  # nosec B101
     assert '"load"' in out  # nosec B101
+
+
+def test_run_pipeline_cmd_api(capsys):
+    """run_pipeline works for the new 'api' source."""
+    exit_code = cli.run_pipeline_cmd(["api"])
+    assert exit_code == 0  # nosec B101
+    out = capsys.readouterr().out
+    assert '"extract"' in out  # nosec B101
 
 
 def test_run_pipeline_cmd_writes_files(tmp_path):
@@ -45,4 +53,58 @@ def test_run_pipeline_cmd_invalid_source(capsys):
     assert exit_code == 1  # nosec B101
     err = capsys.readouterr().err
     assert "Unsupported source type" in err  # nosec B101
+
+
+def test_run_pipeline_list_sources(capsys):
+    """--list-sources prints supported data sources."""
+    exit_code = cli.run_pipeline_cmd(["--list-sources"])
+    assert exit_code == 0  # nosec B101
+    out = capsys.readouterr().out
+    for src in ("s3", "postgresql", "api"):
+        assert src in out  # nosec B101
+
+
+def test_run_pipeline_monitor_log(tmp_path):
+    """Events are written to the monitor log file."""
+    log_file = tmp_path / "events.log"
+    exit_code = cli.run_pipeline_cmd(["s3", "--monitor", str(log_file)])
+    assert exit_code == 0  # nosec B101
+    content = log_file.read_text()
+    assert "starting extract" in content  # nosec B101
+    assert "completed load" in content  # nosec B101
+
+
+def test_run_pipeline_monitor_log_on_failure(tmp_path, monkeypatch):
+    """Monitor file is written even if the pipeline fails."""
+    def bad_load(_data):
+        raise RuntimeError("boom")
+
+    log_file = tmp_path / "events.log"
+
+    orig = orchestrator.DataOrchestrator.create_pipeline
+
+    def fake_create_pipeline(self, source: str, dag_id: str = "generated"):
+        pipeline = orig(self, source, dag_id=dag_id)
+        pipeline.operations["load"] = bad_load
+        return pipeline
+
+    monkeypatch.setattr(
+        orchestrator.DataOrchestrator,
+        "create_pipeline",
+        fake_create_pipeline,
+    )
+
+    exit_code = cli.run_pipeline_cmd(["s3", "--monitor", str(log_file)])
+    assert exit_code == 1  # nosec B101
+    content = log_file.read_text()
+    assert "ERROR:" in content  # nosec B101
+
+
+def test_run_pipeline_monitor_invalid_source(tmp_path):
+    """Monitor file is written when pipeline creation fails."""
+    log_file = tmp_path / "events.log"
+    exit_code = cli.run_pipeline_cmd(["mongodb", "--monitor", str(log_file)])
+    assert exit_code == 1  # nosec B101
+    content = log_file.read_text()
+    assert "ERROR:" in content  # nosec B101
 

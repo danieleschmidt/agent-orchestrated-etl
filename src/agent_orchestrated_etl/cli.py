@@ -7,15 +7,32 @@ from pathlib import Path
 import json
 
 from .data_source_analysis import analyze_source
+from . import data_source_analysis
 from .dag_generator import generate_dag, dag_to_airflow_code
 from . import orchestrator
 
 
 def generate_dag_cmd(args: list[str] | None = None) -> int:
-    """Generate a DAG from a data source and output to a Python file."""
+    """Generate a DAG from a data source and output to a Python file.
+
+    Parameters
+    ----------
+    args:
+        Optional list of CLI arguments. If ``--list-sources`` is supplied,
+        the positional ``source`` and ``output`` arguments are ignored.
+    """
     parser = argparse.ArgumentParser(prog="generate_dag")
-    parser.add_argument("source", help="Data source type, e.g. s3 or postgresql")
-    parser.add_argument("output", help="Output DAG file path")
+    parser.add_argument(
+        "source",
+        nargs="?",
+        help="Data source type, e.g. s3, postgresql, or api",
+    )
+    parser.add_argument("output", nargs="?", help="Output DAG file path")
+    parser.add_argument(
+        "--list-sources",
+        action="store_true",
+        help="Print supported source types and exit",
+    )
     parser.add_argument(
         "--list-tasks",
         action="store_true",
@@ -27,6 +44,13 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
         help="Airflow DAG ID to use in the generated file",
     )
     ns = parser.parse_args(args)
+
+    if ns.list_sources:
+        print(data_source_analysis.supported_sources_text())
+        return 0
+
+    if not ns.source or not ns.output:
+        parser.error("the following arguments are required: source output")
 
     try:
         metadata = analyze_source(ns.source)
@@ -46,9 +70,22 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
 
 
 def run_pipeline_cmd(args: list[str] | None = None) -> int:
-    """Create and execute a pipeline from the given source."""
+    """Create and execute a pipeline from the given source.
+
+    Parameters
+    ----------
+    args:
+        Optional list of CLI arguments. ``--list-sources`` can be used to
+        display supported sources without providing the ``source`` argument.
+        ``--monitor`` writes task events to the specified file. Events are
+        appended as they occur and are recorded even if pipeline creation fails.
+    """
     parser = argparse.ArgumentParser(prog="run_pipeline")
-    parser.add_argument("source", help="Data source type, e.g. s3 or postgresql")
+    parser.add_argument(
+        "source",
+        nargs="?",
+        help="Data source type, e.g. s3, postgresql, or api",
+    )
     parser.add_argument(
         "--output",
         help="Optional path to write JSON results; prints to stdout if omitted",
@@ -63,16 +100,38 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
         help="Optional path to also write the generated Airflow DAG file",
     )
     parser.add_argument(
+        "--monitor",
+        help="Optional path to write pipeline event log",
+    )
+    parser.add_argument(
+        "--list-sources",
+        action="store_true",
+        help="Print supported source types and exit",
+    )
+    parser.add_argument(
         "--list-tasks",
         action="store_true",
         help="Print tasks in execution order and exit",
     )
     ns = parser.parse_args(args)
 
+    if ns.list_sources:
+        print(data_source_analysis.supported_sources_text())
+        return 0
+
+    if not ns.source:
+        parser.error("the following arguments are required: source")
+
+    monitor = None
+    if ns.monitor:
+        monitor = orchestrator.MonitorAgent(ns.monitor)
+
     orch = orchestrator.DataOrchestrator()
     try:
         pipeline = orch.create_pipeline(ns.source, dag_id=ns.dag_id)
     except ValueError as exc:
+        if monitor:
+            monitor.error(str(exc))
         print(exc, file=sys.stderr)
         return 1
 
@@ -82,7 +141,14 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
             print(task_id)
         return 0
 
-    results = pipeline.execute()
+    try:
+        results = pipeline.execute(monitor=monitor)
+    except Exception as exc:  # pragma: no cover - defensive
+        if monitor:
+            monitor.error(str(exc))
+        print(exc, file=sys.stderr)
+        return 1
+
     output_text = json.dumps(results, indent=2)
 
     if ns.output:

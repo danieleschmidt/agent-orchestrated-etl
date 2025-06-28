@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Dict, List
 
 
-SUPPORTED_SOURCES = {"s3", "postgresql"}
+SUPPORTED_SOURCES = {"s3", "postgresql", "api"}
+
+
+def supported_sources_text() -> str:
+    """Return supported source types as newline separated text."""
+    return "\n".join(sorted(SUPPORTED_SOURCES))
 
 
 def analyze_source(source_type: str) -> Dict[str, List[str]]:
@@ -15,7 +20,7 @@ def analyze_source(source_type: str) -> Dict[str, List[str]]:
     ----------
     source_type:
         A string representing the data source type. Currently supports
-        ``"s3"`` and ``"postgresql"``.
+        ``"s3"``, ``"postgresql"``, and ``"api"``.
 
     Returns
     -------
@@ -36,6 +41,11 @@ def analyze_source(source_type: str) -> Dict[str, List[str]]:
         # In a real implementation this would inspect the bucket to infer
         # structure. For now we simply return a single objects table.
         return {"tables": ["objects"], "fields": ["key", "size"]}
+
+    if normalized == "api":
+        # Placeholder metadata for a generic REST API source. In a real
+        # implementation this would introspect available endpoints.
+        return {"tables": ["records"], "fields": ["id", "data"]}
 
     # Simulate a database with multiple tables so the DAG generator can
     # create per-table tasks. The specific table names are not important
