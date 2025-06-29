@@ -3,6 +3,8 @@ import sys
 import os
 from pathlib import Path
 
+import pytest
+
 from agent_orchestrated_etl import cli
 
 
@@ -88,6 +90,12 @@ def test_cli_invalid_source(tmp_path):
     )  # nosec B603
     assert result.returncode != 0  # nosec B101
     assert "Unsupported source type" in result.stderr  # nosec B101
+
+
+def test_cli_invalid_output_path():
+    """Invalid path characters should cause argument parsing to fail."""
+    with pytest.raises(SystemExit):
+        cli.generate_dag_cmd(["s3", "bad\npath"])
 
 
 def test_cli_list_tasks(tmp_path):

@@ -63,10 +63,22 @@ run_pipeline --list-sources
 run_pipeline s3 --monitor events.log
 ```
 
-## Roadmap
-1. Add support for streaming data sources
-2. Implement cost optimization recommendations
-3. Build Slack/Teams integration for pipeline notifications
+## Development Setup
+Install development dependencies and enable pre-commit hooks:
+
+```bash
+pip install -e .[dev]
+pre-commit install
+pytest -q
+coverage run -m pytest -q
+coverage report -m
+radon cc src/agent_orchestrated_etl -s -a
+```
+
+
+## Development Plan
+See [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) for the current roadmap and task
+checklists.
 
 ## License
 MIT

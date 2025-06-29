@@ -6,10 +6,25 @@ from pathlib import Path
 
 import json
 
-from .data_source_analysis import analyze_source
+from .data_source_analysis import analyze_source, SUPPORTED_SOURCES
 from . import data_source_analysis
 from .dag_generator import generate_dag, dag_to_airflow_code
 from . import orchestrator
+
+
+def _source_type(value: str) -> str:
+    """Return a normalized source type or raise an error."""
+    normalized = value.lower()
+    if normalized not in SUPPORTED_SOURCES:
+        raise argparse.ArgumentTypeError(f"Unsupported source type: {value}")
+    return normalized
+
+
+def _safe_path(value: str) -> str:
+    """Basic sanity checks for file paths provided via CLI."""
+    if any(ch in value for ch in ("\n", "\r")) or value.startswith("-"):
+        raise argparse.ArgumentTypeError("invalid path")
+    return value
 
 
 def generate_dag_cmd(args: list[str] | None = None) -> int:
@@ -27,7 +42,12 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
         nargs="?",
         help="Data source type, e.g. s3, postgresql, or api",
     )
-    parser.add_argument("output", nargs="?", help="Output DAG file path")
+    parser.add_argument(
+        "output",
+        nargs="?",
+        type=_safe_path,
+        help="Output DAG file path",
+    )
     parser.add_argument(
         "--list-sources",
         action="store_true",
@@ -52,10 +72,7 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
     if not ns.source or not ns.output:
         parser.error("the following arguments are required: source output")
 
-    try:
-        metadata = analyze_source(ns.source)
-    except ValueError as exc:
-        parser.exit(1, f"{exc}\n")
+    metadata = analyze_source(ns.source)
 
     dag = generate_dag(metadata)
 
@@ -77,8 +94,9 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     args:
         Optional list of CLI arguments. ``--list-sources`` can be used to
         display supported sources without providing the ``source`` argument.
-        ``--monitor`` writes task events to the specified file. Events are
-        appended as they occur and are recorded even if pipeline creation fails.
+        ``--monitor`` writes task events to the specified file.
+        Events are appended as they occur and recorded even if pipeline
+        creation fails.
     """
     parser = argparse.ArgumentParser(prog="run_pipeline")
     parser.add_argument(
@@ -88,7 +106,11 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--output",
-        help="Optional path to write JSON results; prints to stdout if omitted",
+        type=_safe_path,
+        help=(
+            "Optional path to write JSON results; prints to stdout "
+            "if omitted"
+        ),
     )
     parser.add_argument(
         "--dag-id",
@@ -97,10 +119,12 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--airflow",
+        type=_safe_path,
         help="Optional path to also write the generated Airflow DAG file",
     )
     parser.add_argument(
         "--monitor",
+        type=_safe_path,
         help="Optional path to write pipeline event log",
     )
     parser.add_argument(
@@ -126,6 +150,12 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     if ns.monitor:
         monitor = orchestrator.MonitorAgent(ns.monitor)
 
+    try:
+        ns.source = _source_type(ns.source)
+    except argparse.ArgumentTypeError as exc:
+        if monitor:
+            monitor.error(str(exc))
+        parser.exit(2, f"argument source: {exc}\n")
     orch = orchestrator.DataOrchestrator()
     try:
         pipeline = orch.create_pipeline(ns.source, dag_id=ns.dag_id)
@@ -134,7 +164,6 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
             monitor.error(str(exc))
         print(exc, file=sys.stderr)
         return 1
-
 
     if ns.list_tasks:
         for task_id in pipeline.dag.topological_sort():

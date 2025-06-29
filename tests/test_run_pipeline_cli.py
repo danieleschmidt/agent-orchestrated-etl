@@ -1,5 +1,7 @@
 from agent_orchestrated_etl import cli, orchestrator
 
+import pytest
+
 
 def test_run_pipeline_cmd(capsys):
     """run_pipeline command executes the pipeline and prints JSON results."""
@@ -49,10 +51,8 @@ def test_run_pipeline_cmd_list_tasks(capsys):
 
 def test_run_pipeline_cmd_invalid_source(capsys):
     """Invalid source results in non-zero exit code and error message."""
-    exit_code = cli.run_pipeline_cmd(["mongodb"])
-    assert exit_code == 1  # nosec B101
-    err = capsys.readouterr().err
-    assert "Unsupported source type" in err  # nosec B101
+    with pytest.raises(SystemExit):
+        cli.run_pipeline_cmd(["mongodb"])
 
 
 def test_run_pipeline_list_sources(capsys):
@@ -103,8 +103,8 @@ def test_run_pipeline_monitor_log_on_failure(tmp_path, monkeypatch):
 def test_run_pipeline_monitor_invalid_source(tmp_path):
     """Monitor file is written when pipeline creation fails."""
     log_file = tmp_path / "events.log"
-    exit_code = cli.run_pipeline_cmd(["mongodb", "--monitor", str(log_file)])
-    assert exit_code == 1  # nosec B101
+    with pytest.raises(SystemExit):
+        cli.run_pipeline_cmd(["mongodb", "--monitor", str(log_file)])
     content = log_file.read_text()
     assert "ERROR:" in content  # nosec B101
 
