@@ -14,3 +14,14 @@ packages = ["agent_orchestrated_etl"]
 [project.scripts]
 generate_dag = "agent_orchestrated_etl.cli:main"
 run_pipeline = "agent_orchestrated_etl.cli:run_pipeline_cmd"
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.1",
+    "ruff==0.12.1",
+    "Pygments==2.19.2",
+    "pre-commit==3.7.0",
+    "detect-secrets==1.4.0",
+    "coverage==7.9.1",
+    "radon==6.0.1",
+]
