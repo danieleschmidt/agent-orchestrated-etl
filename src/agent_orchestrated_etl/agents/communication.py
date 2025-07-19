@@ -513,7 +513,14 @@ class AgentCommunicationHub:
             channel = self.channels[recipient_id]
             return await channel.send_message(message)
         
-        self.logger.warning(f"No route found for recipient: {recipient_id}")
+        # Fallback: Route unknown recipients to broadcast channel
+        # This ensures message delivery even when specific recipients aren't registered
+        fallback_channel = self.channels.get("broadcast")
+        if fallback_channel:
+            self.logger.info(f"Routing message for unknown recipient '{recipient_id}' to broadcast channel")
+            return await fallback_channel.send_message(message)
+        
+        self.logger.warning(f"No route found for recipient: {recipient_id} and no fallback channel available")
         return False
     
     async def _process_messages(self) -> None:
