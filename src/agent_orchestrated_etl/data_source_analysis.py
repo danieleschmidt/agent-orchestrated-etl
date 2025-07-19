@@ -8,7 +8,7 @@ from typing import Dict, List
 from .validation import ValidationError
 
 
-SUPPORTED_SOURCES = {"s3", "postgresql", "api"}
+SUPPORTED_SOURCES = {"s3", "postgresql", "api", "test_db", "test_database", "integration_test_db"}
 
 
 def supported_sources_text() -> str:
@@ -86,11 +86,21 @@ def analyze_source(source_type: str) -> Dict[str, List[str]]:
         # implementation this would introspect available endpoints.
         metadata = {"tables": ["records"], "fields": ["id", "data"]}
         
-    else:  # postgresql
+    elif normalized == "postgresql":
         # Simulate a database with multiple tables so the DAG generator can
         # create per-table tasks. The specific table names are not important
         # for current tests but provide a more realistic example.
         metadata = {"tables": ["users", "orders"], "fields": ["id", "value"]}
+        
+    elif normalized in ["test_db", "test_database", "integration_test_db"]:
+        # Test database sources for unit/integration testing
+        # Provide predictable metadata that tests can rely on
+        metadata = {"tables": ["test_table"], "fields": ["test_id", "test_data", "test_timestamp"]}
+    
+    else:
+        # This should not happen since we validate supported sources earlier,
+        # but add explicit handling for completeness
+        raise ValueError(f"Unsupported source type: {source_type}")
     
     # Validate the metadata for security issues
     _validate_metadata_security(metadata)

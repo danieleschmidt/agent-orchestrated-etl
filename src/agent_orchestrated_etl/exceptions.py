@@ -568,9 +568,11 @@ class ToolException(AgentETLException):
         tool_inputs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        super().__init__(message, category=ErrorCategory.SYSTEM, **kwargs)
+        # Set tool-specific attributes first
         self.tool_name = tool_name
         self.tool_inputs = tool_inputs
+        # Now call parent constructor
+        super().__init__(message, category=ErrorCategory.SYSTEM, **kwargs)
     
     def _generate_user_message(self) -> str:
         tool = self.tool_name or "tool"
