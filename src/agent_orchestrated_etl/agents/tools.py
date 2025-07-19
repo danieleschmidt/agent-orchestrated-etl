@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, Union
 
@@ -127,7 +128,7 @@ class AnalyzeDataSourceTool(ETLTool):
                 "source_path": source_path,
                 "source_type": source_type,
                 "metadata": metadata,
-                "analysis_timestamp": asyncio.get_event_loop().time(),
+                "analysis_timestamp": time.time(),
                 "include_samples": include_samples,
                 "max_sample_rows": max_sample_rows,
             }
@@ -176,7 +177,7 @@ class GenerateDAGTool(ETLTool):
                     "include_validation": include_validation,
                     "parallel_tasks": parallel_tasks,
                 },
-                "generation_timestamp": asyncio.get_event_loop().time(),
+                "generation_timestamp": time.time(),
             }
             
             return dag_result
@@ -201,13 +202,13 @@ class ExecutePipelineTool(ETLTool):
             
             # This is a simplified version - in practice, you'd create a full pipeline
             execution_result = {
-                "execution_id": f"exec_{int(asyncio.get_event_loop().time())}",
+                "execution_id": f"exec_{int(time.time())}",
                 "dag_config": dag_config,
                 "execution_mode": execution_mode,
                 "monitor_progress": monitor_progress,
                 "timeout_seconds": timeout_seconds,
                 "status": "started",
-                "start_time": asyncio.get_event_loop().time(),
+                "start_time": time.time(),
                 "message": "Pipeline execution initiated (implementation would run actual pipeline)",
             }
             
@@ -233,7 +234,7 @@ class ValidateDataQualityTool(ETLTool):
                 "validation_rules": validation_rules,
                 "sample_percentage": sample_percentage,
                 "fail_on_errors": fail_on_errors,
-                "validation_timestamp": asyncio.get_event_loop().time(),
+                "validation_timestamp": time.time(),
                 "results": {
                     "total_rules": len(validation_rules),
                     "passed_rules": len(validation_rules),  # Placeholder
@@ -274,7 +275,7 @@ class QueryDataTool(ETLTool):
                 "query": query,
                 "limit": limit,
                 "format": format,
-                "execution_timestamp": asyncio.get_event_loop().time(),
+                "execution_timestamp": time.time(),
                 "results": {
                     "row_count": 0,  # Placeholder
                     "columns": [],  # Placeholder
@@ -311,7 +312,7 @@ class MonitorPipelineTool(ETLTool):
                 "pipeline_id": pipeline_id,
                 "include_logs": include_logs,
                 "include_metrics": include_metrics,
-                "monitoring_timestamp": asyncio.get_event_loop().time(),
+                "monitoring_timestamp": time.time(),
                 "status": {
                     "state": "running",  # Placeholder
                     "progress": 0.5,  # Placeholder
