@@ -295,6 +295,11 @@ class TestAgentCoordination:
         etl_agent = ETLAgent(specialization="general")
         monitor_agent = MonitorAgent(monitoring_scope="test")
         
+        # Start agents before registering them
+        await orchestrator.start()
+        await etl_agent.start()
+        await monitor_agent.start()
+        
         # Register agents
         await coordinator.register_agent(orchestrator)
         await coordinator.register_agent(etl_agent)
@@ -310,7 +315,10 @@ class TestAgentCoordination:
             }
         }
         
-        # Cleanup
+        # Cleanup - stop agents first, then communication hub
+        await orchestrator.stop()
+        await etl_agent.stop()
+        await monitor_agent.stop()
         await comm_hub.stop()
     
     @pytest.mark.asyncio

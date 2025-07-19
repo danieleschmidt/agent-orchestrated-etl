@@ -8,7 +8,7 @@ from typing import Dict, List
 from .validation import ValidationError
 
 
-SUPPORTED_SOURCES = {"s3", "postgresql", "api", "test_db", "test_database", "integration_test_db"}
+SUPPORTED_SOURCES = {"s3", "postgresql", "api", "test_db", "test_database", "integration_test_db", "test_source"}
 
 
 def supported_sources_text() -> str:
@@ -92,7 +92,7 @@ def analyze_source(source_type: str) -> Dict[str, List[str]]:
         # for current tests but provide a more realistic example.
         metadata = {"tables": ["users", "orders"], "fields": ["id", "value"]}
         
-    elif normalized in ["test_db", "test_database", "integration_test_db"]:
+    elif normalized in ["test_db", "test_database", "integration_test_db", "test_source"]:
         # Test database sources for unit/integration testing
         # Provide predictable metadata that tests can rely on
         metadata = {"tables": ["test_table"], "fields": ["test_id", "test_data", "test_timestamp"]}
