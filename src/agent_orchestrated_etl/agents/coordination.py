@@ -7,14 +7,12 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set
 
 from .base_agent import BaseAgent, AgentTask
-from .communication import AgentCommunicationHub, Message, MessageType, MessagePriority
+from .communication import AgentCommunicationHub
 from .orchestrator_agent import OrchestratorAgent
-from .etl_agent import ETLAgent
-from .monitor_agent import MonitorAgent
-from ..exceptions import AgentException, CoordinationException
+from ..exceptions import CoordinationException
 from ..logging_config import get_logger, LogContext
 
 
@@ -418,7 +416,7 @@ class AgentCoordinator:
                         workflow_state["task_results"][task.task_id] = result
                         all_results.append(result)
                         
-            except Exception as e:
+            except Exception:
                 if workflow_def.error_handling == "stop_on_error":
                     raise
         

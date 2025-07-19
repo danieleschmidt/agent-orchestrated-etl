@@ -7,14 +7,13 @@ import functools
 import logging
 import random
 import time
-from typing import Any, Callable, List, Optional, Type, TypeVar, Union
+from typing import Any, Callable, List, Optional, Type, TypeVar
 
 from .exceptions import (
     AgentETLException,
     NetworkException,
     ExternalServiceException,
     RateLimitException,
-    CircuitBreakerException,
     is_retryable_exception,
     get_retry_delay,
 )

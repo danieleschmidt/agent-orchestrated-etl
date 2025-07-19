@@ -6,13 +6,12 @@ import functools
 import logging
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from .exceptions import (
     AgentETLException,
-    DataSourceException,
     ExternalServiceException,
     NetworkException,
     ErrorSeverity,

@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .communication import AgentCommunicationHub
 
 from langchain_core.language_models.base import BaseLanguageModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from ..exceptions import AgentETLException, AgentException, ValidationException
+from ..exceptions import AgentException, ValidationException
 from ..logging_config import get_logger, LogContext
 from ..retry import retry, RetryConfigs
 from ..circuit_breaker import circuit_breaker, CircuitBreakerConfigs

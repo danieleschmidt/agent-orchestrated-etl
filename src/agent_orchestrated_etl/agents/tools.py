@@ -5,14 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from langchain_core.tools import BaseTool
-from langchain_core.utils.json_schema import create_json_schema
+# Note: create_json_schema not available in current langchain version
+# Using pydantic's model_json_schema instead
 from pydantic import BaseModel, Field
 
-from ..exceptions import AgentException, ToolException, ValidationException
+from ..exceptions import AgentException, ToolException
 from ..logging_config import get_logger
 from ..retry import retry, RetryConfigs
 from ..circuit_breaker import circuit_breaker, CircuitBreakerConfigs
@@ -69,7 +69,13 @@ class ETLTool(BaseTool, ABC):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.logger = get_logger(f"tool.{self.name}")
+        # Use object.__setattr__ to set private attributes in Pydantic models
+        object.__setattr__(self, '_logger', get_logger(f"tool.{self.name}"))
+    
+    @property
+    def logger(self):
+        """Get the logger instance."""
+        return getattr(self, '_logger', None) or get_logger(f"tool.{self.name}")
     
     @retry(RetryConfigs.STANDARD)
     @circuit_breaker("etl_tool_execution", CircuitBreakerConfigs.STANDARD)
@@ -87,13 +93,13 @@ class ETLTool(BaseTool, ABC):
                 
         except Exception as e:
             self.logger.error(f"Tool execution failed: {e}", exc_info=e)
-            raise ToolException(f"Tool {self.name} failed: {e}") from e
+            raise ToolException(f"Tool {self.name} failed: {e}", tool_name=self.name) from e
     
     async def _arun(self, **kwargs) -> str:
         """Asynchronous tool execution."""
         # Default implementation runs sync version in executor
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._run, **kwargs)
+        return await loop.run_in_executor(None, lambda: self._run(**kwargs))
     
     @abstractmethod
     def _execute(self, **kwargs) -> Union[str, Dict[str, Any]]:
@@ -104,9 +110,9 @@ class ETLTool(BaseTool, ABC):
 class AnalyzeDataSourceTool(ETLTool):
     """Tool for analyzing data sources."""
     
-    name = "analyze_data_source"
-    description = "Analyze a data source to extract metadata, schema, and sample data"
-    args_schema = AnalyzeDataSourceSchema
+    name: str = "analyze_data_source"
+    description: str = "Analyze a data source to extract metadata, schema, and sample data"
+    args_schema: Type[BaseModel] = AnalyzeDataSourceSchema
     
     def _execute(self, source_path: str, source_type: str, include_samples: bool = True, max_sample_rows: int = 100) -> Dict[str, Any]:
         """Analyze data source and return metadata."""
@@ -136,15 +142,15 @@ class AnalyzeDataSourceTool(ETLTool):
             return analysis_result
             
         except Exception as e:
-            raise ToolException(f"Data source analysis failed: {e}") from e
+            raise ToolException(f"Data source analysis failed: {e}", tool_name=self.name) from e
 
 
 class GenerateDAGTool(ETLTool):
     """Tool for generating ETL DAGs."""
     
-    name = "generate_dag"
-    description = "Generate an ETL DAG based on data source metadata"
-    args_schema = GenerateDAGSchema
+    name: str = "generate_dag"
+    description: str = "Generate an ETL DAG based on data source metadata"
+    args_schema: Type[BaseModel] = GenerateDAGSchema
     
     def _execute(self, metadata: Dict[str, Any], dag_id: str, include_validation: bool = True, parallel_tasks: bool = True) -> Dict[str, Any]:
         """Generate DAG configuration."""
@@ -176,15 +182,15 @@ class GenerateDAGTool(ETLTool):
             return dag_result
             
         except Exception as e:
-            raise ToolException(f"DAG generation failed: {e}") from e
+            raise ToolException(f"DAG generation failed: {e}", tool_name=self.name) from e
 
 
 class ExecutePipelineTool(ETLTool):
     """Tool for executing ETL pipelines."""
     
-    name = "execute_pipeline"
-    description = "Execute an ETL pipeline based on DAG configuration"
-    args_schema = ExecutePipelineSchema
+    name: str = "execute_pipeline"
+    description: str = "Execute an ETL pipeline based on DAG configuration"
+    args_schema: Type[BaseModel] = ExecutePipelineSchema
     
     def _execute(self, dag_config: Dict[str, Any], execution_mode: str = "async", monitor_progress: bool = True, timeout_seconds: int = 3600) -> Dict[str, Any]:
         """Execute ETL pipeline."""
@@ -208,15 +214,15 @@ class ExecutePipelineTool(ETLTool):
             return execution_result
             
         except Exception as e:
-            raise ToolException(f"Pipeline execution failed: {e}") from e
+            raise ToolException(f"Pipeline execution failed: {e}", tool_name=self.name) from e
 
 
 class ValidateDataQualityTool(ETLTool):
     """Tool for validating data quality."""
     
-    name = "validate_data_quality"
-    description = "Validate data quality using specified rules and criteria"
-    args_schema = ValidateDataQualitySchema
+    name: str = "validate_data_quality"
+    description: str = "Validate data quality using specified rules and criteria"
+    args_schema: Type[BaseModel] = ValidateDataQualitySchema
     
     def _execute(self, data_source: str, validation_rules: List[Dict[str, Any]], sample_percentage: float = 10.0, fail_on_errors: bool = False) -> Dict[str, Any]:
         """Validate data quality."""
@@ -242,14 +248,14 @@ class ValidateDataQualityTool(ETLTool):
             return validation_result
             
         except Exception as e:
-            raise ToolException(f"Data quality validation failed: {e}") from e
+            raise ToolException(f"Data quality validation failed: {e}", tool_name=self.name) from e
 
 
 class QueryDataTool(ETLTool):
     """Tool for querying data sources."""
     
-    name = "query_data"
-    description = "Execute queries against data sources"
+    name: str = "query_data"
+    description: str = "Execute queries against data sources"
     
     class QueryDataSchema(ETLToolSchema):
         data_source: str = Field(description="Data source identifier")
@@ -257,7 +263,7 @@ class QueryDataTool(ETLTool):
         limit: int = Field(default=100, description="Maximum number of results")
         format: str = Field(default="json", description="Output format (json, csv, etc.)")
     
-    args_schema = QueryDataSchema
+    args_schema: Type[BaseModel] = QueryDataSchema
     
     def _execute(self, data_source: str, query: str, limit: int = 100, format: str = "json") -> Dict[str, Any]:
         """Execute data query."""
@@ -281,21 +287,21 @@ class QueryDataTool(ETLTool):
             return query_result
             
         except Exception as e:
-            raise ToolException(f"Data query failed: {e}") from e
+            raise ToolException(f"Data query failed: {e}", tool_name=self.name) from e
 
 
 class MonitorPipelineTool(ETLTool):
     """Tool for monitoring pipeline execution."""
     
-    name = "monitor_pipeline"
-    description = "Monitor the status and progress of pipeline execution"
+    name: str = "monitor_pipeline"
+    description: str = "Monitor the status and progress of pipeline execution"
     
     class MonitorPipelineSchema(ETLToolSchema):
         pipeline_id: str = Field(description="Pipeline execution ID to monitor")
         include_logs: bool = Field(default=False, description="Include execution logs")
         include_metrics: bool = Field(default=True, description="Include performance metrics")
     
-    args_schema = MonitorPipelineSchema
+    args_schema: Type[BaseModel] = MonitorPipelineSchema
     
     def _execute(self, pipeline_id: str, include_logs: bool = False, include_metrics: bool = True) -> Dict[str, Any]:
         """Monitor pipeline execution."""
@@ -329,7 +335,7 @@ class MonitorPipelineTool(ETLTool):
             return monitor_result
             
         except Exception as e:
-            raise ToolException(f"Pipeline monitoring failed: {e}") from e
+            raise ToolException(f"Pipeline monitoring failed: {e}", tool_name=self.name) from e
 
 
 class AgentToolRegistry:
