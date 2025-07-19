@@ -6,6 +6,15 @@ build-backend = "setuptools.build_meta"
 name = "agent_orchestrated_etl"
 version = "0.0.1"
 requires-python = ">=3.8"
+dependencies = [
+    "PyYAML>=6.0",
+    "watchdog>=3.0.0",
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+    "langchain-community>=0.0.20",
+    "pydantic>=2.0.0",
+    "tiktoken>=0.5.0",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
