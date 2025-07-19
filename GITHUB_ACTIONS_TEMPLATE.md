@@ -1,3 +1,19 @@
+# GitHub Actions CI/CD Pipeline Template
+
+Due to GitHub App permissions, the CI/CD workflow file needs to be created manually. Here's the complete workflow configuration to add to your repository.
+
+## Setup Instructions
+
+1. Create the directory structure in your repository:
+   ```
+   .github/
+   └── workflows/
+       └── ci.yml
+   ```
+
+2. Copy the following content into `.github/workflows/ci.yml`:
+
+```yaml
 name: CI Pipeline
 
 on:
@@ -185,3 +201,56 @@ jobs:
         with:
           name: dist
           path: dist/
+```
+
+## Features
+
+This CI/CD pipeline provides:
+
+### Security Features
+- **Bandit Security Scanning**: Detects common security issues in Python code
+- **Safety Vulnerability Check**: Checks for known vulnerabilities in dependencies
+- **Ruff Linting**: Code quality and security linting
+- **Secret Detection**: Pre-commit hooks prevent credential commits
+
+### Quality Assurance
+- **Type Checking**: MyPy static type analysis
+- **Code Formatting**: Automated code formatting verification
+- **Complexity Analysis**: Radon complexity checking
+- **Documentation Style**: PEP 257 docstring conventions
+
+### Testing
+- **Multi-Python Support**: Tests across Python 3.8-3.12
+- **Coverage Reporting**: Test coverage analysis and reporting
+- **Artifact Upload**: Security reports and build artifacts
+
+### Build Verification
+- **Package Building**: Validates package can be built correctly
+- **Distribution Check**: Validates package metadata and structure
+
+## Customization
+
+You can customize this workflow by:
+
+1. **Adjusting Python versions** in the test matrix
+2. **Adding integration tests** with database services
+3. **Configuring deployment** stages for staging/production
+4. **Adding performance benchmarks** for regression testing
+5. **Integrating with external security scanners**
+
+## Required Secrets
+
+For full functionality, configure these repository secrets:
+
+- `CODECOV_TOKEN`: For coverage reporting (optional)
+- `PYPI_API_TOKEN`: For automated package publishing (if needed)
+
+## Troubleshooting
+
+- If security scans fail, review the uploaded reports in the Actions artifacts
+- Coverage failures indicate insufficient test coverage (target: >85%)
+- Build failures may indicate packaging issues or missing dependencies
+
+---
+
+This template provides a comprehensive CI/CD pipeline that enforces security and quality standards for the Agent-Orchestrated ETL project.
