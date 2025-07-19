@@ -37,29 +37,31 @@ class OrchestratorAgent(BaseAgent):
         elif config.role != AgentRole.ORCHESTRATOR:
             config.role = AgentRole.ORCHESTRATOR
         
-        super().__init__(config, llm, communication_hub)
-        
-        # Orchestrator-specific components
+        # Initialize attributes before calling super().__init__() 
+        # because base class calls _initialize_agent() which needs these attributes
         self.tool_registry = tool_registry or get_tool_registry()
-        self.memory = AgentMemory(
-            agent_id=self.config.agent_id,
-            max_entries=50000,  # Orchestrators need more memory
-            working_memory_size=200,
-        )
-        
-        # Workflow management
         self.active_workflows: Dict[str, Dict[str, Any]] = {}
         self.workflow_history: List[Dict[str, Any]] = []
         self.subordinate_agents: Set[str] = set()
-        
-        # Decision-making state
-        self.decision_context: Dict[str, Any] = {}
+        self.decision_context: Dict[str, Any] = {}  # Will be properly set in _initialize_agent()
         self.planning_strategies: List[str] = [
             "sequential_execution",
             "parallel_optimization",
             "resource_aware_scheduling",
             "error_recovery_planning",
         ]
+        
+        super().__init__(config, llm, communication_hub)
+        
+        # Note: decision_context is properly initialized in _initialize_agent() 
+        # which is called by super().__init__()
+        
+        # Initialize memory after super().__init__() since it needs self.config.agent_id
+        self.memory = AgentMemory(
+            agent_id=self.config.agent_id,
+            max_entries=50000,  # Orchestrators need more memory
+            working_memory_size=200,
+        )
     
     def _initialize_agent(self) -> None:
         """Initialize orchestrator-specific components."""
