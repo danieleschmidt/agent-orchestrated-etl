@@ -377,8 +377,8 @@ class ConfigManager:
         config.api.api_key = secret_manager.get_secret("API_KEY")
         config.api.timeout = int(os.getenv("AGENT_ETL_API_TIMEOUT", "30"))
         
-        # Load logging config
-        config.logging.level = os.getenv("AGENT_ETL_LOG_LEVEL", "INFO")
+        # Load logging config - support both prefixed and simple env vars for compatibility
+        config.logging.level = os.getenv("AGENT_ETL_LOG_LEVEL") or os.getenv("LOG_LEVEL", "INFO")
         config.logging.format = os.getenv("AGENT_ETL_LOG_FORMAT", "json")
         config.logging.output = os.getenv("AGENT_ETL_LOG_OUTPUT", "console")
         config.logging.file_path = os.getenv("AGENT_ETL_LOG_FILE")
