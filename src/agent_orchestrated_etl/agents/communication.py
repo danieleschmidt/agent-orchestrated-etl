@@ -7,12 +7,14 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+if TYPE_CHECKING:
+    from .base_agent import BaseAgent
 
-from ..exceptions import AgentException, CommunicationException
-from ..logging_config import get_logger, LogContext
+
+from ..exceptions import CommunicationException
+from ..logging_config import get_logger
 
 
 class MessageType(Enum):

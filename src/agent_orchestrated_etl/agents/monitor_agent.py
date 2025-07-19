@@ -39,6 +39,9 @@ class MonitorAgent(BaseAgent):
         elif config.role != AgentRole.MONITOR:
             config.role = AgentRole.MONITOR
         
+        # Monitor-specific attributes (set before super() call as _initialize_agent uses them)
+        self.monitoring_scope = monitoring_scope
+        
         super().__init__(config, llm, communication_hub)
         
         # Monitor-specific components

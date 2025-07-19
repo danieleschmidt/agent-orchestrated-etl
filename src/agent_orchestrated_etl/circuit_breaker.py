@@ -9,13 +9,10 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from .exceptions import (
-    AgentETLException,
     CircuitBreakerException,
-    ExternalServiceException,
-    NetworkException,
 )
 
 F = TypeVar('F', bound=Callable[..., Any])

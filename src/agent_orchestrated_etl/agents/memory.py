@@ -6,11 +6,11 @@ import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set
 
 from pydantic import BaseModel, Field
 
-from ..exceptions import AgentException, ValidationException
+from ..exceptions import AgentException
 from ..logging_config import get_logger
 
 

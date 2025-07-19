@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -38,6 +37,9 @@ class ETLAgent(BaseAgent):
             )
         elif config.role != AgentRole.ETL_SPECIALIST:
             config.role = AgentRole.ETL_SPECIALIST
+        
+        # ETL-specific attributes (set before super() call as _initialize_agent uses them)
+        self.specialization = specialization
         
         super().__init__(config, llm, communication_hub)
         

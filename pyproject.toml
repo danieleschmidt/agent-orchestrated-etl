@@ -27,6 +27,7 @@ run_pipeline = "agent_orchestrated_etl.cli:run_pipeline_cmd"
 [project.optional-dependencies]
 dev = [
     "pytest==8.4.1",
+    "pytest-asyncio>=0.21.0",
     "ruff==0.12.1",
     "Pygments==2.19.2",
     "pre-commit==3.7.0",
@@ -38,5 +39,18 @@ dev = [
     "mypy==1.11.2",
     "pydocstyle==6.3.0",
     "types-PyYAML==6.0.12.20241230",
-    "types-requests==2.32.0.20241230",
+    "types-requests>=2.32.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "asyncio: mark test as async",
+    "slow: mark test as slow",
+    "integration: mark test as integration test",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"

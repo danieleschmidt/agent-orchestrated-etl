@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
-from .config import AppConfig
 
 
 def generate_config_template(
@@ -73,13 +71,13 @@ def _generate_yaml_template(
     
     template_lines.extend([
         "security:",
-        f"  secret_provider: env  # Options: env, aws_secrets, vault",
-        f"  secret_prefix: AGENT_ETL_",
-        f"  max_dag_id_length: 200",
-        f"  max_task_name_length: 250",
-        f"  max_file_path_length: 4096",
-        f"  max_pipeline_executions_per_minute: 60",
-        f"  max_dag_generation_per_minute: 120",
+        "  secret_provider: env  # Options: env, aws_secrets, vault",
+        "  secret_prefix: AGENT_ETL_",
+        "  max_dag_id_length: 200",
+        "  max_task_name_length: 250",
+        "  max_file_path_length: 4096",
+        "  max_pipeline_executions_per_minute: 60",
+        "  max_dag_generation_per_minute: 120",
         "",
     ])
     
@@ -101,12 +99,12 @@ def _generate_yaml_template(
     template_lines.extend([
         "database:",
         f"  host: {host_example}  # Override with AGENT_ETL_DB_HOST",
-        f"  port: 5432",
+        "  port: 5432",
         f"  database: {db_example}  # Override with AGENT_ETL_DB_NAME",
-        f"  username: null  # Override with AGENT_ETL_DB_USER",
-        f"  password: null  # Override with AGENT_ETL_DB_PASSWORD",
-        f"  ssl_mode: require",
-        f"  connection_timeout: 30",
+        "  username: null  # Override with AGENT_ETL_DB_USER",
+        "  password: null  # Override with AGENT_ETL_DB_PASSWORD",
+        "  ssl_mode: require",
+        "  connection_timeout: 30",
         "",
     ])
     
@@ -120,12 +118,12 @@ def _generate_yaml_template(
     
     template_lines.extend([
         "s3:",
-        f"  region: us-east-1",
-        f"  access_key_id: null  # Override with AGENT_ETL_S3_ACCESS_KEY_ID",
-        f"  secret_access_key: null  # Override with AGENT_ETL_S3_SECRET_ACCESS_KEY",
-        f"  session_token: null  # Override with AGENT_ETL_S3_SESSION_TOKEN",
-        f"  endpoint_url: null  # For S3-compatible services",
-        f"  use_ssl: true",
+        "  region: us-east-1",
+        "  access_key_id: null  # Override with AGENT_ETL_S3_ACCESS_KEY_ID",
+        "  secret_access_key: null  # Override with AGENT_ETL_S3_SECRET_ACCESS_KEY",
+        "  session_token: null  # Override with AGENT_ETL_S3_SESSION_TOKEN",
+        "  endpoint_url: null  # For S3-compatible services",
+        "  use_ssl: true",
         "",
     ])
     
@@ -143,10 +141,10 @@ def _generate_yaml_template(
     template_lines.extend([
         "api:",
         f"  base_url: {api_url}",
-        f"  api_key: null  # Override with AGENT_ETL_API_KEY",
-        f"  timeout: 30",
-        f"  max_retries: 3",
-        f"  user_agent: agent-orchestrated-etl/1.0",
+        "  api_key: null  # Override with AGENT_ETL_API_KEY",
+        "  timeout: 30",
+        "  max_retries: 3",
+        "  user_agent: agent-orchestrated-etl/1.0",
         "",
     ])
     
@@ -158,16 +156,16 @@ def _generate_yaml_template(
     
     log_level = "INFO" if environment == "production" else "DEBUG"
     log_output = "file" if environment == "production" else "console"
-    log_file = f"/var/log/agent-etl/app.log" if environment == "production" else "null"
+    log_file = "/var/log/agent-etl/app.log" if environment == "production" else "null"
     
     template_lines.extend([
         "logging:",
         f"  level: {log_level}  # DEBUG, INFO, WARNING, ERROR, CRITICAL",
-        f"  format: json  # json or text",
+        "  format: json  # json or text",
         f"  output: {log_output}  # console, file, or both",
         f"  file_path: {log_file}",
-        f"  max_file_size_mb: 100",
-        f"  backup_count: 5",
+        "  max_file_size_mb: 100",
+        "  backup_count: 5",
         "",
     ])
     
@@ -386,9 +384,9 @@ def generate_env_template(environment: str = "development") -> str:
     """
     
     template_lines = [
-        f"# Environment variables for Agent-Orchestrated ETL",
+        "# Environment variables for Agent-Orchestrated ETL",
         f"# Environment: {environment}",
-        f"# Copy this file to .env and update the values",
+        "# Copy this file to .env and update the values",
         "",
         "# Core settings",
         f"AGENT_ETL_ENVIRONMENT={environment}",
@@ -483,7 +481,7 @@ def create_config_package(
     # Create README
     readme_path = output_dir / "README.md"
     if not readme_path.exists() or overwrite:
-        readme_content = f"""# Agent-Orchestrated ETL Configuration
+        readme_content = """# Agent-Orchestrated ETL Configuration
 
 This directory contains configuration templates for different environments.
 
