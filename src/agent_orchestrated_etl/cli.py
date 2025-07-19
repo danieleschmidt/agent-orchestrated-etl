@@ -10,21 +10,13 @@ from .data_source_analysis import analyze_source, SUPPORTED_SOURCES
 from . import data_source_analysis
 from .dag_generator import generate_dag, dag_to_airflow_code
 from . import orchestrator
-
-
-def _source_type(value: str) -> str:
-    """Return a normalized source type or raise an error."""
-    normalized = value.lower()
-    if normalized not in SUPPORTED_SOURCES:
-        raise argparse.ArgumentTypeError(f"Unsupported source type: {value}")
-    return normalized
-
-
-def _safe_path(value: str) -> str:
-    """Basic sanity checks for file paths provided via CLI."""
-    if any(ch in value for ch in ("\n", "\r")) or value.startswith("-"):
-        raise argparse.ArgumentTypeError("invalid path")
-    return value
+from .validation import (
+    safe_path_type,
+    safe_dag_id_type,
+    safe_source_type,
+    sanitize_json_output,
+    ValidationError
+)
 
 
 def generate_dag_cmd(args: list[str] | None = None) -> int:
@@ -40,12 +32,13 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
     parser.add_argument(
         "source",
         nargs="?",
+        type=safe_source_type(SUPPORTED_SOURCES),
         help="Data source type, e.g. s3, postgresql, or api",
     )
     parser.add_argument(
         "output",
         nargs="?",
-        type=_safe_path,
+        type=safe_path_type,
         help="Output DAG file path",
     )
     parser.add_argument(
@@ -60,6 +53,7 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--dag-id",
+        type=safe_dag_id_type,
         default="generated",
         help="Airflow DAG ID to use in the generated file",
     )
@@ -72,7 +66,10 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
     if not ns.source or not ns.output:
         parser.error("the following arguments are required: source output")
 
-    metadata = analyze_source(ns.source)
+    try:
+        metadata = analyze_source(ns.source)
+    except (ValueError, ValidationError) as e:
+        parser.exit(2, f"Source analysis failed: {e}\n")
 
     dag = generate_dag(metadata)
 
@@ -102,11 +99,12 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     parser.add_argument(
         "source",
         nargs="?",
+        type=safe_source_type(SUPPORTED_SOURCES),
         help="Data source type, e.g. s3, postgresql, or api",
     )
     parser.add_argument(
         "--output",
-        type=_safe_path,
+        type=safe_path_type,
         help=(
             "Optional path to write JSON results; prints to stdout "
             "if omitted"
@@ -114,17 +112,18 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--dag-id",
+        type=safe_dag_id_type,
         default="generated",
         help="DAG ID to use if also emitting Airflow code",
     )
     parser.add_argument(
         "--airflow",
-        type=_safe_path,
+        type=safe_path_type,
         help="Optional path to also write the generated Airflow DAG file",
     )
     parser.add_argument(
         "--monitor",
-        type=_safe_path,
+        type=safe_path_type,
         help="Optional path to write pipeline event log",
     )
     parser.add_argument(
@@ -150,12 +149,7 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     if ns.monitor:
         monitor = orchestrator.MonitorAgent(ns.monitor)
 
-    try:
-        ns.source = _source_type(ns.source)
-    except argparse.ArgumentTypeError as exc:
-        if monitor:
-            monitor.error(str(exc))
-        parser.exit(2, f"argument source: {exc}\n")
+    # Source validation is now handled by argparse type function
     orch = orchestrator.DataOrchestrator()
     try:
         pipeline = orch.create_pipeline(ns.source, dag_id=ns.dag_id)
@@ -178,7 +172,9 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
         print(exc, file=sys.stderr)
         return 1
 
-    output_text = json.dumps(results, indent=2)
+    # Sanitize output to prevent information leakage
+    sanitized_results = sanitize_json_output(results)
+    output_text = json.dumps(sanitized_results, indent=2)
 
     if ns.output:
         Path(ns.output).write_text(output_text)

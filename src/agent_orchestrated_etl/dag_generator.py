@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Set
 
+from .validation import validate_dag_id, validate_task_name, ValidationError
+
 
 @dataclass
 class Task:
@@ -21,11 +23,17 @@ class SimpleDAG:
 
     def add_task(self, task_id: str) -> Task:
         """Add a task to the DAG if it doesn't already exist."""
-        if task_id in self.tasks:
-            return self.tasks[task_id]
+        # Validate task ID for security
+        try:
+            validated_task_id = validate_task_name(task_id)
+        except ValidationError as e:
+            raise ValueError(f"Invalid task ID '{task_id}': {e}")
+        
+        if validated_task_id in self.tasks:
+            return self.tasks[validated_task_id]
 
-        task = Task(task_id)
-        self.tasks[task_id] = task
+        task = Task(validated_task_id)
+        self.tasks[validated_task_id] = task
         return task
 
     def topological_sort(self) -> list[str]:
@@ -85,9 +93,15 @@ def generate_dag(metadata: Dict) -> SimpleDAG:
     dag.set_dependency("transform", "load")
 
     for table in metadata["tables"]:
-        extract_id = f"extract_{table}"
-        transform_id = f"transform_{table}"
-        load_id = f"load_{table}"
+        # Validate table name to prevent injection
+        try:
+            validated_table = validate_task_name(str(table))
+        except ValidationError as e:
+            raise ValueError(f"Invalid table name '{table}': {e}")
+        
+        extract_id = f"extract_{validated_table}"
+        transform_id = f"transform_{validated_table}"
+        load_id = f"load_{validated_table}"
 
         dag.add_task(extract_id)
         dag.add_task(transform_id)
@@ -116,16 +130,26 @@ def dag_to_airflow_code(dag: SimpleDAG, dag_id: str = "generated") -> str:
     str
         Python source code for an Airflow DAG using ``EmptyOperator`` tasks.
     """
+    # Validate DAG ID for security
+    try:
+        validated_dag_id = validate_dag_id(dag_id)
+    except ValidationError as e:
+        raise ValueError(f"Invalid DAG ID '{dag_id}': {e}")
 
     def _var(name: str) -> str:
-        return name.replace("-", "_")
+        # Additional sanitization for Python variable names
+        sanitized = name.replace("-", "_").replace(".", "_")
+        # Ensure it starts with a letter or underscore
+        if sanitized and not (sanitized[0].isalpha() or sanitized[0] == '_'):
+            sanitized = f"task_{sanitized}"
+        return sanitized
 
     lines = [
         "from airflow import DAG",
         "from airflow.operators.empty import EmptyOperator",
         "from datetime import datetime",
         "",
-        f"with DAG('{dag_id}', start_date=datetime(2024, 1, 1), schedule_interval=None) as dag:",
+        f"with DAG('{validated_dag_id}', start_date=datetime(2024, 1, 1), schedule_interval=None) as dag:",
     ]
 
     for task_id in sorted(dag.tasks):

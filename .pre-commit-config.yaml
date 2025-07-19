@@ -1,14 +1,91 @@
+# Pre-commit hooks for Agent-Orchestrated ETL
+# See https://pre-commit.com for more information
+
 repos:
+  # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
-  - repo: https://github.com/PyCQA/flake8
-    rev: 6.1.0
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-aws-credentials
+      - id: detect-private-key
+
+  # Python code formatting and linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.1
     hooks:
-      - id: flake8
+      # Linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Formatter
+      - id: ruff-format
+
+  # Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-PyYAML
+          - types-requests
+        args: [--ignore-missing-imports]
+
+  # Security scanning
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: ['-r', 'src/', '-f', 'json', '-o', 'bandit-report.json']
+        exclude: ^tests/
+
+  # Secret detection
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:
       - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^tests/
+
+  # Documentation style
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: [--convention=numpy]
+        exclude: ^tests/
+
+  # Local hooks for project-specific checks
+  - repo: local
+    hooks:
+      - id: complexity-check
+        name: Check code complexity
+        entry: bash -c 'if command -v radon >/dev/null 2>&1; then radon cc src/agent_orchestrated_etl -s -a --total-average; else echo "radon not installed, skipping complexity check"; fi'
+        language: system
+        pass_filenames: false
+
+      - id: security-audit
+        name: Security audit
+        entry: bash -c 'if command -v safety >/dev/null 2>&1; then safety check; else echo "safety not installed, skipping security audit"; fi'
+        language: system
+        pass_filenames: false
+
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
