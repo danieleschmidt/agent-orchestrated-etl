@@ -6,15 +6,13 @@ import csv
 import io
 import json
 import re
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from .validation import ValidationError
 
 try:
     import boto3
-    import pandas as pd
     from botocore.exceptions import ClientError, NoCredentialsError
     BOTO3_AVAILABLE = True
 except ImportError:
@@ -179,6 +177,9 @@ class S3DataAnalyzer:
                 "AWS credentials not configured. "
                 "Set up credentials via environment variables, IAM role, or AWS credentials file."
             )
+        except ValidationError:
+            # Re-raise ValidationError so tests can catch it
+            raise
         except Exception as e:
             result.errors.append(f"Analysis error: {str(e)}")
         
@@ -332,7 +333,7 @@ class S3DataAnalyzer:
                 # For other formats, return basic info
                 return {'format': file_format, 'columns': ['content']}, None
         
-        except Exception as e:
+        except Exception:
             return None, None
     
     def _analyze_csv_content(self, content: bytes) -> tuple[Dict, Dict]:
@@ -390,27 +391,25 @@ class S3DataAnalyzer:
         """Analyze JSON content for schema and quality."""
         try:
             text_content = content.decode('utf-8', errors='ignore')
-            
-            # Try to parse as JSON Lines first
-            lines = text_content.strip().split('\n')
             json_objects = []
             
-            for line in lines[:10]:  # Analyze first 10 lines
-                try:
-                    obj = json.loads(line.strip())
-                    if isinstance(obj, dict):
-                        json_objects.append(obj)
-                except json.JSONDecodeError:
-                    # Try parsing entire content as single JSON
+            # First try to parse entire content as single JSON (array or object)
+            try:
+                obj = json.loads(text_content)
+                if isinstance(obj, dict):
+                    json_objects = [obj]
+                elif isinstance(obj, list):
+                    json_objects = obj[:10]  # First 10 items
+            except json.JSONDecodeError:
+                # Fall back to JSON Lines format
+                lines = text_content.strip().split('\n')
+                for line in lines[:10]:  # Analyze first 10 lines
                     try:
-                        obj = json.loads(text_content)
+                        obj = json.loads(line.strip())
                         if isinstance(obj, dict):
-                            json_objects = [obj]
-                        elif isinstance(obj, list):
-                            json_objects = obj[:10]  # First 10 items
-                        break
+                            json_objects.append(obj)
                     except json.JSONDecodeError:
-                        pass
+                        continue
             
             if not json_objects:
                 return {'format': 'json', 'columns': ['raw_json']}, {}
@@ -451,24 +450,81 @@ class S3DataAnalyzer:
             return {'format': 'json', 'columns': ['raw_json']}, {}
     
     def _analyze_parquet_file(self, s3_client: Any, bucket: str, key: str) -> tuple[Dict, Dict]:
-        """Analyze Parquet file metadata."""
+        """Analyze Parquet file metadata using pyarrow."""
         if not PYARROW_AVAILABLE:
             return {'format': 'parquet', 'columns': ['data']}, {}
         
         try:
-            # For Parquet, we can read metadata without downloading the full file
-            # This is a simplified version - in practice you'd use pyarrow's S3FileSystem
-            response = s3_client.get_object(Bucket=bucket, Key=key, Range='bytes=0-1024')
+            # Use pyarrow to read Parquet metadata from S3
+            import pyarrow.fs as fs
             
-            # This is a placeholder - real implementation would parse Parquet metadata
+            # Create S3 filesystem using the same credentials as s3_client
+            s3_fs = fs.S3FileSystem(
+                region=self.region_name,
+                session=boto3.Session()
+            )
+            
+            # Read parquet file metadata without downloading the entire file
+            parquet_file = pq.ParquetFile(f"{bucket}/{key}", filesystem=s3_fs)
+            
+            # Extract schema information
+            schema = parquet_file.schema_arrow
+            columns = [field.name for field in schema]
+            
+            # Get row count from metadata
+            row_count = parquet_file.metadata.num_rows
+            
+            # Analyze column types and quality
+            quality_info = {
+                'rows_analyzed': row_count,
+                'data_types': {},
+                'potential_pii': [],
+                'parquet_metadata': {
+                    'num_row_groups': parquet_file.metadata.num_row_groups,
+                    'created_by': parquet_file.metadata.created_by
+                }
+            }
+            
+            for field in schema:
+                # Convert Arrow types to readable format
+                arrow_type = str(field.type)
+                if 'int' in arrow_type:
+                    quality_info['data_types'][field.name] = 'numeric'
+                elif 'float' in arrow_type or 'double' in arrow_type:
+                    quality_info['data_types'][field.name] = 'numeric'
+                elif 'string' in arrow_type:
+                    quality_info['data_types'][field.name] = 'text'
+                elif 'bool' in arrow_type:
+                    quality_info['data_types'][field.name] = 'boolean'
+                elif 'timestamp' in arrow_type or 'date' in arrow_type:
+                    quality_info['data_types'][field.name] = 'date'
+                else:
+                    quality_info['data_types'][field.name] = 'unknown'
+                
+                # Check for potential PII fields
+                field_name_lower = field.name.lower()
+                if any(pii_term in field_name_lower for pii_term in ['email', 'phone', 'ssn', 'social', 'credit', 'password']):
+                    quality_info['potential_pii'].append(field.name)
+            
             return {
                 'format': 'parquet',
-                'columns': ['parquet_data'],  # Would extract actual column names
-                'row_count': 'unknown'
-            }, {}
+                'columns': columns,
+                'row_count': row_count,
+                'schema_metadata': {
+                    'arrow_schema': str(schema),
+                    'num_row_groups': parquet_file.metadata.num_row_groups,
+                    'file_size_bytes': parquet_file.metadata.serialized_size
+                }
+            }, quality_info
         
-        except Exception:
-            return {'format': 'parquet', 'columns': ['data']}, {}
+        except Exception as e:
+            # Fall back to basic analysis on any error
+            return {
+                'format': 'parquet',
+                'columns': ['data'],
+                'row_count': 'unknown',
+                'analysis_error': str(e)
+            }, {}
     
     def _infer_column_type(self, values: List[str]) -> str:
         """Infer data type from sample values."""

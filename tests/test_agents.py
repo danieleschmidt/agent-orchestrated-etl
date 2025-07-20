@@ -528,3 +528,155 @@ class TestAgentIntegration:
         assert "status" in result  # Should return some result
         
         await agent.stop()
+
+
+class TestEnhancedAgentSelection:
+    """Tests for enhanced capability-based agent selection."""
+    
+    @pytest.mark.asyncio
+    async def test_capability_matching_data_extraction(self):
+        """Test that agents are selected based on capability matching for data extraction."""
+        # Create communication hub and coordinator
+        comm_hub = AgentCommunicationHub()
+        await comm_hub.start()
+        coordinator = AgentCoordinator(comm_hub)
+        
+        # Create agents with different capabilities
+        etl_agent = ETLAgent(specialization="general")
+        monitor_agent = MonitorAgent(monitoring_scope="test")
+        await etl_agent.start()
+        await monitor_agent.start()
+        
+        # Register agents
+        await coordinator.register_agent(etl_agent)
+        await coordinator.register_agent(monitor_agent)
+        
+        # Create workflow definition with correct agent names
+        workflow_def = WorkflowDefinition(
+            name="test_workflow",
+            agents=[etl_agent.config.name, monitor_agent.config.name],
+            tasks=[],
+            coordination_pattern="sequential"
+        )
+        
+        # Create data extraction task
+        task = CoordinationTask(
+            task_type="extract_data",
+            task_data={
+                "data_source": "database",
+                "data_format": "json"
+            },
+            priority=8
+        )
+        
+        # Test agent selection
+        selected_agent = await coordinator._find_suitable_agent(task, workflow_def)
+        assert selected_agent == etl_agent.config.name  # Should select ETL agent for data extraction
+        
+        # Cleanup
+        await etl_agent.stop()
+        await monitor_agent.stop()
+        await comm_hub.stop()
+    
+    @pytest.mark.asyncio
+    async def test_capability_scoring_with_confidence(self):
+        """Test that agent scoring considers confidence levels."""
+        comm_hub = AgentCommunicationHub()
+        await comm_hub.start()
+        coordinator = AgentCoordinator(comm_hub)
+        
+        # Create ETL agent (has data_extraction capability with high confidence)
+        etl_agent = ETLAgent(specialization="general")
+        await etl_agent.start()
+        
+        # Create task requiring data extraction
+        task = CoordinationTask(
+            task_type="extract_data",
+            task_data={"data_source": "database"},
+            priority=5
+        )
+        
+        # Test capability requirement extraction
+        required_capabilities = coordinator._get_required_capabilities(task)
+        assert "data_extraction" in required_capabilities
+        assert "sql_optimization" in required_capabilities  # Added due to database source
+        
+        # Test agent scoring
+        score = coordinator._calculate_agent_score(etl_agent, required_capabilities, task)
+        assert score > 0.3  # Should have reasonable score for partial capability matching
+        assert score < 1.0  # But not perfect since some capabilities are missing
+        
+        await etl_agent.stop()
+        await comm_hub.stop()
+    
+    @pytest.mark.asyncio
+    async def test_fallback_mechanisms(self):
+        """Test that fallback mechanisms work when no capability match exists."""
+        comm_hub = AgentCommunicationHub()
+        await comm_hub.start()
+        coordinator = AgentCoordinator(comm_hub)
+        
+        # Create agents
+        etl_agent = ETLAgent(specialization="general")
+        orchestrator_agent = OrchestratorAgent()
+        await etl_agent.start()
+        await orchestrator_agent.start()
+        
+        await coordinator.register_agent(etl_agent)
+        await coordinator.register_agent(orchestrator_agent)
+        
+        workflow_def = WorkflowDefinition(
+            name="test_workflow",
+            agents=[etl_agent.config.name, orchestrator_agent.config.name],
+            tasks=[],
+            coordination_pattern="sequential"
+        )
+        
+        # Create task that doesn't match any specific capabilities
+        task = CoordinationTask(
+            task_type="unknown_task_type",
+            task_data={},
+            priority=5
+        )
+        
+        # Should still return an agent (fallback mechanism)
+        selected_agent = await coordinator._find_suitable_agent(task, workflow_def)
+        assert selected_agent in [etl_agent.config.name, orchestrator_agent.config.name]
+        
+        await etl_agent.stop()
+        await orchestrator_agent.stop()
+        await comm_hub.stop()
+    
+    @pytest.mark.asyncio 
+    async def test_priority_bonus_application(self):
+        """Test that task priority affects agent selection scoring."""
+        comm_hub = AgentCommunicationHub()
+        await comm_hub.start()
+        coordinator = AgentCoordinator(comm_hub)
+        
+        etl_agent = ETLAgent(specialization="general")
+        await etl_agent.start()
+        
+        # Test with high priority task
+        high_priority_task = CoordinationTask(
+            task_type="extract_data",
+            task_data={"data_source": "database"},
+            priority=10
+        )
+        
+        # Test with low priority task
+        low_priority_task = CoordinationTask(
+            task_type="extract_data",
+            task_data={"data_source": "database"},
+            priority=1
+        )
+        
+        required_caps = coordinator._get_required_capabilities(high_priority_task)
+        high_score = coordinator._calculate_agent_score(etl_agent, required_caps, high_priority_task)
+        low_score = coordinator._calculate_agent_score(etl_agent, required_caps, low_priority_task)
+        
+        # High priority task should get higher score
+        assert high_score > low_score
+        
+        await etl_agent.stop()
+        await comm_hub.stop()
