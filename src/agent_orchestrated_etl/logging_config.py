@@ -14,6 +14,9 @@ from typing import Dict, Optional, Union
 
 from .config import get_config
 
+# Track whether logging has been configured
+_logging_configured = False
+
 
 class StructuredFormatter(logging.Formatter):
     """Custom formatter for structured JSON logging."""
@@ -440,6 +443,10 @@ def setup_logging(
     logging.getLogger("boto3").setLevel(logging.WARNING)
     logging.getLogger("botocore").setLevel(logging.WARNING)
     
+    # Mark logging as configured
+    global _logging_configured
+    _logging_configured = True
+    
     # Log startup message
     logger = logging.getLogger("agent_orchestrated_etl.startup")
     logger.info(
@@ -456,12 +463,20 @@ def setup_logging(
 def get_logger(name: str) -> logging.Logger:
     """Get a logger with the specified name.
     
+    This function automatically sets up logging configuration if it hasn't 
+    been done yet, ensuring that LOG_LEVEL and other environment variables
+    are respected.
+    
     Args:
         name: Logger name
         
     Returns:
         Configured logger instance
     """
+    global _logging_configured
+    if not _logging_configured:
+        setup_logging()
+    
     return logging.getLogger(name)
 
 

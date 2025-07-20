@@ -556,7 +556,6 @@ class AgentCommunicationHub:
             # Route to recipient agent
             recipient_id = message.recipient_id
             if recipient_id in self.agents:
-                agent = self.agents[recipient_id]
                 # Here you would call agent-specific message handlers
                 # For now, just log the message
                 self.logger.debug(

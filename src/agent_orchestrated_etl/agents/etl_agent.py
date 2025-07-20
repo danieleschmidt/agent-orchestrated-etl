@@ -389,7 +389,7 @@ Respond with structured data when appropriate, including metrics and status info
         
         try:
             data_source = task.inputs.get("data_source")
-            profiling_config = task.inputs.get("profiling_config", {})
+            # TODO: Use profiling_config for advanced data profiling
             
             # Perform data profiling (simplified implementation)
             profile_result = {

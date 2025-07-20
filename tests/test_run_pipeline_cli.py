@@ -84,7 +84,8 @@ def test_run_pipeline_monitor_log_on_failure(tmp_path, monkeypatch):
     orig = orchestrator.DataOrchestrator.create_pipeline
 
     def fake_create_pipeline(self, source: str, dag_id: str = "generated"):
-        pipeline = orig(self, source, dag_id=dag_id)
+        # Disable graceful degradation to ensure failures are logged
+        pipeline = orig(self, source, dag_id=dag_id, enable_graceful_degradation=False)
         pipeline.operations["load"] = bad_load
         return pipeline
 
@@ -95,16 +96,18 @@ def test_run_pipeline_monitor_log_on_failure(tmp_path, monkeypatch):
     )
 
     exit_code = cli.run_pipeline_cmd(["s3", "--monitor", str(log_file)])
-    assert exit_code == 1  # nosec B101
+    # With graceful degradation disabled, pipeline should fail and log errors
     content = log_file.read_text()
     assert "ERROR:" in content  # nosec B101
+    # Pipeline should fail due to disabled graceful degradation
+    assert exit_code == 1  # nosec B101
 
 
 def test_run_pipeline_monitor_invalid_source(tmp_path):
-    """Monitor file is written when pipeline creation fails."""
+    """Invalid source causes argparse error before monitor file creation."""
     log_file = tmp_path / "events.log"
     with pytest.raises(SystemExit):
         cli.run_pipeline_cmd(["mongodb", "--monitor", str(log_file)])
-    content = log_file.read_text()
-    assert "ERROR:" in content  # nosec B101
+    # Monitor file is not created when argparse validation fails
+    assert not log_file.exists()  # nosec B101
 

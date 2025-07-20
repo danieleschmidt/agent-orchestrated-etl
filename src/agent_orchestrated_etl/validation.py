@@ -206,7 +206,7 @@ def sanitize_json_output(data: Any) -> Any:
         for key, value in data.items():
             # Skip keys that might contain sensitive information
             if isinstance(key, str) and any(
-                sensitive in key.lower() 
+                key.lower().endswith(sensitive) or key.lower() == sensitive
                 for sensitive in ['password', 'secret', 'token', 'key', 'credential']
             ):
                 sanitized[key] = "[REDACTED]"

@@ -100,7 +100,6 @@ class MonitorAgent:
             message,
             extra={
                 "event_type": "task_log",
-                "task_id": task_id,
             }
         )
 
@@ -115,7 +114,6 @@ class MonitorAgent:
         
         extra = {
             "event_type": "task_error",
-            "task_id": task_id,
         }
         
         if exception:
@@ -328,8 +326,6 @@ class DataOrchestrator:
                 f"Creating pipeline for source: {source}",
                 extra={
                     "event_type": "pipeline_creation_start",
-                    "source": source,
-                    "dag_id": dag_id,
                 }
             )
             
@@ -372,8 +368,6 @@ class DataOrchestrator:
                     f"Pipeline created successfully: {dag_id}",
                     extra={
                         "event_type": "pipeline_creation_success",
-                        "dag_id": dag_id,
-                        "source": source,
                         "total_tasks": len(dag.tasks),
                     }
                 )
@@ -385,8 +379,6 @@ class DataOrchestrator:
                     f"Failed to create pipeline: {exc}",
                     extra={
                         "event_type": "pipeline_creation_error",
-                        "dag_id": dag_id,
-                        "source": source,
                     },
                     exc_info=exc,
                 )
