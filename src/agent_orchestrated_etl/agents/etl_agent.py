@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Dict, List, Optional
+import statistics
+from typing import Any, Dict, List, Optional, Union
+from dataclasses import dataclass
+import re
 
 from langchain_core.language_models.base import BaseLanguageModel
 
@@ -14,6 +17,105 @@ from .memory import AgentMemory, MemoryType, MemoryImportance
 from .tools import AgentToolRegistry, get_tool_registry
 from ..exceptions import AgentException, DataProcessingException
 from ..logging_config import LogContext
+
+
+@dataclass
+class ProfilingConfig:
+    """Configuration for data profiling operations."""
+    
+    # Profiling depth settings
+    statistical_analysis: bool = True
+    anomaly_detection: bool = True
+    data_quality_scoring: bool = True
+    pattern_detection: bool = True
+    
+    # Sampling settings
+    sample_size: Optional[int] = 10000  # None for full dataset
+    sample_percentage: float = 10.0  # Used if sample_size is None
+    random_seed: int = 42
+    
+    # Statistical analysis settings
+    percentiles: List[float] = None
+    correlation_analysis: bool = False
+    distribution_analysis: bool = True
+    
+    # Anomaly detection settings
+    outlier_method: str = "iqr"  # iqr, zscore, isolation_forest
+    outlier_threshold: float = 1.5  # For IQR method
+    zscore_threshold: float = 3.0  # For Z-score method
+    
+    # Data quality settings
+    completeness_threshold: float = 0.95
+    validity_patterns: Dict[str, str] = None
+    consistency_checks: List[str] = None
+    
+    # Performance settings
+    max_unique_values: int = 1000  # For categorical analysis
+    timeout_seconds: int = 300
+    
+    def __post_init__(self):
+        """Set default values for mutable fields."""
+        if self.percentiles is None:
+            self.percentiles = [25.0, 50.0, 75.0, 90.0, 95.0, 99.0]
+        if self.validity_patterns is None:
+            self.validity_patterns = {
+                'email': r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+                'phone': r'^\+?[1-9]\d{1,14}$',
+                'url': r'^https?://[^\s]+$',
+                'ipv4': r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+            }
+        if self.consistency_checks is None:
+            self.consistency_checks = ['format_consistency', 'range_consistency', 'pattern_consistency']
+
+
+@dataclass
+class ColumnProfile:
+    """Detailed profile for a single column."""
+    
+    name: str
+    data_type: str
+    null_count: int
+    null_percentage: float
+    unique_count: int
+    unique_percentage: float
+    
+    # Statistical measures (for numeric columns)
+    mean: Optional[float] = None
+    median: Optional[float] = None
+    mode: Optional[Union[str, float]] = None
+    std_dev: Optional[float] = None
+    variance: Optional[float] = None
+    min_value: Optional[Union[str, float]] = None
+    max_value: Optional[Union[str, float]] = None
+    percentiles: Optional[Dict[str, float]] = None
+    
+    # String-specific measures
+    avg_length: Optional[float] = None
+    min_length: Optional[int] = None
+    max_length: Optional[int] = None
+    
+    # Pattern analysis
+    detected_patterns: List[str] = None
+    format_consistency: float = 1.0
+    
+    # Data quality metrics
+    completeness_score: float = 1.0
+    validity_score: float = 1.0
+    consistency_score: float = 1.0
+    
+    # Anomaly detection
+    outlier_count: int = 0
+    outlier_percentage: float = 0.0
+    outlier_values: List[Union[str, float]] = None
+    
+    def __post_init__(self):
+        """Initialize mutable fields."""
+        if self.detected_patterns is None:
+            self.detected_patterns = []
+        if self.outlier_values is None:
+            self.outlier_values = []
+        if self.percentiles is None:
+            self.percentiles = {}
 
 
 class ETLAgent(BaseAgent):
@@ -384,41 +486,619 @@ Respond with structured data when appropriate, including metrics and status info
             raise DataProcessingException(f"Data validation failed: {e}") from e
     
     async def _profile_data(self, task: AgentTask) -> Dict[str, Any]:
-        """Profile data to understand structure and quality."""
-        self.logger.info("Starting data profiling")
+        """Profile data to understand structure and quality using advanced algorithms."""
+        self.logger.info("Starting advanced data profiling")
         
         try:
             data_source = task.inputs.get("data_source")
-            # TODO: Use profiling_config for advanced data profiling
+            profiling_config_dict = task.inputs.get("profiling_config", {})
             
-            # Perform data profiling (simplified implementation)
-            profile_result = {
+            # Create profiling configuration
+            profiling_config = ProfilingConfig(**profiling_config_dict)
+            
+            # Perform comprehensive data profiling
+            profile_result = await self._perform_comprehensive_profiling(data_source, profiling_config)
+            
+            # Store profiling results in memory
+            await self._store_etl_memory("profiling", {
                 "data_source": data_source,
-                "profiling_timestamp": time.time(),
-                "statistics": {
-                    "total_records": 1000,  # Placeholder
-                    "total_columns": 10,    # Placeholder
-                    "data_types": {"string": 5, "integer": 3, "float": 2},
-                    "null_percentages": {"col1": 0.1, "col2": 0.05},
-                    "unique_counts": {"col1": 950, "col2": 800},
-                },
-                "quality_metrics": {
-                    "completeness": 0.95,
-                    "validity": 0.98,
-                    "consistency": 0.92,
-                    "accuracy": 0.96,
-                },
-                "recommendations": [
-                    "Address null values in col1",
-                    "Consider indexing on col2 for better performance",
-                ],
-            }
+                "profiling_config": profiling_config_dict,
+                "result": profile_result,
+                "timestamp": time.time(),
+            })
             
             return profile_result
             
         except Exception as e:
             self.logger.error(f"Data profiling failed: {e}", exc_info=e)
             raise DataProcessingException(f"Data profiling failed: {e}") from e
+    
+    async def _perform_comprehensive_profiling(self, data_source: str, config: ProfilingConfig) -> Dict[str, Any]:
+        """Perform comprehensive data profiling with advanced statistical analysis."""
+        start_time = time.time()
+        
+        # Mock data loading - in real implementation, this would load actual data
+        sample_data = await self._load_sample_data(data_source, config)
+        
+        # Analyze dataset structure
+        dataset_stats = self._analyze_dataset_structure(sample_data)
+        
+        # Profile each column
+        column_profiles = []
+        for column_name in sample_data.get("columns", []):
+            column_data = sample_data.get("data", {}).get(column_name, [])
+            if column_data:  # Only profile columns with data
+                profile = self._profile_column(column_name, column_data, config)
+                column_profiles.append(profile)
+        
+        # Calculate overall data quality score
+        overall_quality = self._calculate_overall_quality_score(column_profiles)
+        
+        # Generate actionable recommendations
+        recommendations = self._generate_profiling_recommendations(column_profiles, overall_quality)
+        
+        # Detect cross-column patterns and correlations
+        correlations = {}
+        if config.correlation_analysis and len(column_profiles) > 1:
+            correlations = self._analyze_correlations(sample_data, column_profiles)
+        
+        execution_time = time.time() - start_time
+        
+        return {
+            "data_source": data_source,
+            "profiling_timestamp": time.time(),
+            "execution_time_seconds": execution_time,
+            "profiling_config": {
+                "statistical_analysis": config.statistical_analysis,
+                "anomaly_detection": config.anomaly_detection,
+                "data_quality_scoring": config.data_quality_scoring,
+                "sample_size": config.sample_size,
+                "outlier_method": config.outlier_method
+            },
+            "dataset_statistics": dataset_stats,
+            "column_profiles": [self._column_profile_to_dict(cp) for cp in column_profiles],
+            "correlations": correlations,
+            "overall_quality_score": overall_quality,
+            "quality_breakdown": {
+                "completeness": statistics.mean([cp.completeness_score for cp in column_profiles]) if column_profiles else 1.0,
+                "validity": statistics.mean([cp.validity_score for cp in column_profiles]) if column_profiles else 1.0,
+                "consistency": statistics.mean([cp.consistency_score for cp in column_profiles]) if column_profiles else 1.0,
+                "outlier_impact": 1.0 - (sum([cp.outlier_percentage for cp in column_profiles]) / len(column_profiles) / 100) if column_profiles else 1.0
+            },
+            "recommendations": recommendations,
+            "anomaly_summary": {
+                "total_outliers": sum([cp.outlier_count for cp in column_profiles]),
+                "columns_with_outliers": len([cp for cp in column_profiles if cp.outlier_count > 0]),
+                "avg_outlier_percentage": statistics.mean([cp.outlier_percentage for cp in column_profiles]) if column_profiles else 0.0
+            }
+        }
+    
+    async def _load_sample_data(self, data_source: str, config: ProfilingConfig) -> Dict[str, Any]:
+        """Load sample data for profiling (mock implementation)."""
+        # In a real implementation, this would:
+        # 1. Connect to the actual data source
+        # 2. Apply sampling strategy based on config
+        # 3. Load data in efficient chunks
+        
+        # Mock data generation for demonstration
+        import random
+        random.seed(config.random_seed)
+        
+        # Generate realistic mock data
+        columns = ["user_id", "email", "age", "salary", "registration_date", "is_premium", "last_login"]
+        num_records = min(config.sample_size or 5000, 5000)
+        
+        mock_data = {
+            "columns": columns,
+            "total_records": num_records,
+            "data": {
+                "user_id": [f"user_{i:06d}" for i in range(num_records)],
+                "email": [f"user{i}@{'company' if i % 10 == 0 else 'example'}.com" for i in range(num_records)],
+                "age": [random.randint(18, 80) if random.random() > 0.05 else None for _ in range(num_records)],
+                "salary": [random.normalvariate(75000, 25000) if random.random() > 0.03 else None for _ in range(num_records)],
+                "registration_date": [f"2023-{random.randint(1,12):02d}-{random.randint(1,28):02d}" for _ in range(num_records)],
+                "is_premium": [random.choice([True, False]) for _ in range(num_records)],
+                "last_login": [f"2024-{random.randint(1,12):02d}-{random.randint(1,28):02d}" if random.random() > 0.1 else None for _ in range(num_records)]
+            }
+        }
+        
+        # Add some intentional outliers for testing
+        if num_records > 100:
+            # Add salary outliers
+            for i in range(5):
+                mock_data["data"]["salary"][i] = random.choice([500000, -1000, 0])  # Outliers
+            # Add age outliers  
+            for i in range(5, 10):
+                mock_data["data"]["age"][i] = random.choice([150, -5, 200])  # Outliers
+        
+        return mock_data
+    
+    def _analyze_dataset_structure(self, sample_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze basic dataset structure and characteristics."""
+        columns = sample_data.get("columns", [])
+        data = sample_data.get("data", {})
+        total_records = sample_data.get("total_records", 0)
+        
+        # Analyze data types
+        type_distribution = {}
+        for column in columns:
+            column_data = data.get(column, [])
+            inferred_type = self._infer_data_type(column_data)
+            type_distribution[inferred_type] = type_distribution.get(inferred_type, 0) + 1
+        
+        # Calculate memory usage estimate
+        estimated_memory_mb = total_records * len(columns) * 8 / (1024 * 1024)  # Rough estimate
+        
+        return {
+            "total_records": total_records,
+            "total_columns": len(columns),
+            "data_type_distribution": type_distribution,
+            "estimated_memory_mb": round(estimated_memory_mb, 2),
+            "columns": columns,
+            "has_missing_data": any(None in data.get(col, []) for col in columns),
+            "sparsity": self._calculate_sparsity(data, columns, total_records)
+        }
+    
+    def _profile_column(self, column_name: str, column_data: List[Any], config: ProfilingConfig) -> ColumnProfile:
+        """Create comprehensive profile for a single column."""
+        # Basic statistics
+        total_count = len(column_data)
+        null_values = [x for x in column_data if x is None]
+        non_null_data = [x for x in column_data if x is not None]
+        
+        null_count = len(null_values)
+        null_percentage = (null_count / total_count * 100) if total_count > 0 else 0
+        
+        unique_values = list(set(non_null_data))
+        unique_count = len(unique_values)
+        unique_percentage = (unique_count / total_count * 100) if total_count > 0 else 0
+        
+        # Infer data type
+        data_type = self._infer_data_type(non_null_data)
+        
+        # Initialize profile
+        profile = ColumnProfile(
+            name=column_name,
+            data_type=data_type,
+            null_count=null_count,
+            null_percentage=null_percentage,
+            unique_count=unique_count,
+            unique_percentage=unique_percentage
+        )
+        
+        # Statistical analysis for numeric data
+        if config.statistical_analysis and data_type in ['integer', 'float'] and non_null_data:
+            try:
+                numeric_data = [float(x) for x in non_null_data if isinstance(x, (int, float))]
+                if numeric_data:
+                    profile.mean = statistics.mean(numeric_data)
+                    profile.median = statistics.median(numeric_data)
+                    if len(numeric_data) > 1:
+                        profile.std_dev = statistics.stdev(numeric_data)
+                        profile.variance = statistics.variance(numeric_data)
+                    profile.min_value = min(numeric_data)
+                    profile.max_value = max(numeric_data)
+                    
+                    # Calculate percentiles
+                    if len(numeric_data) >= 4:  # Need at least 4 values for meaningful percentiles
+                        profile.percentiles = {}
+                        for p in config.percentiles:
+                            try:
+                                profile.percentiles[f"p{int(p)}"] = self._calculate_percentile(numeric_data, p)
+                            except Exception:
+                                pass
+                    
+                    # Mode calculation
+                    try:
+                        profile.mode = statistics.mode(numeric_data)
+                    except statistics.StatisticsError:
+                        # No unique mode
+                        pass
+            except Exception as e:
+                self.logger.warning(f"Statistical analysis failed for column {column_name}: {e}")
+        
+        # String analysis
+        if data_type == 'string' and non_null_data:
+            str_data = [str(x) for x in non_null_data if x is not None]
+            if str_data:
+                lengths = [len(s) for s in str_data]
+                profile.avg_length = statistics.mean(lengths)
+                profile.min_length = min(lengths)
+                profile.max_length = max(lengths)
+        
+        # Pattern detection
+        if config.pattern_detection:
+            profile.detected_patterns = self._detect_patterns(non_null_data, config)
+            profile.format_consistency = self._calculate_format_consistency(non_null_data, profile.detected_patterns)
+        
+        # Data quality scoring
+        if config.data_quality_scoring:
+            profile.completeness_score = max(0, (100 - null_percentage) / 100)
+            profile.validity_score = self._calculate_validity_score(non_null_data, config)
+            profile.consistency_score = profile.format_consistency
+        
+        # Anomaly detection
+        if config.anomaly_detection and data_type in ['integer', 'float'] and non_null_data:
+            outliers = self._detect_outliers(non_null_data, config)
+            profile.outlier_count = len(outliers)
+            profile.outlier_percentage = (len(outliers) / len(non_null_data) * 100) if non_null_data else 0
+            profile.outlier_values = outliers[:10]  # Store first 10 outliers
+        
+        return profile
+    
+    def _infer_data_type(self, data: List[Any]) -> str:
+        """Infer the data type of a column."""
+        if not data:
+            return 'unknown'
+        
+        # Remove None values for type checking
+        non_null_data = [x for x in data if x is not None]
+        if not non_null_data:
+            return 'null'
+        
+        # Sample first few non-null values for type inference
+        sample = non_null_data[:100]
+        
+        # Check for boolean
+        if all(isinstance(x, bool) for x in sample):
+            return 'boolean'
+        
+        # Check for integer
+        try:
+            int_count = sum(1 for x in sample if isinstance(x, int) or (isinstance(x, str) and x.isdigit()))
+            if int_count / len(sample) > 0.8:
+                return 'integer'
+        except Exception:
+            pass
+        
+        # Check for float
+        try:
+            float_count = 0
+            for x in sample:
+                if isinstance(x, float):
+                    float_count += 1
+                elif isinstance(x, str):
+                    try:
+                        float(x)
+                        float_count += 1
+                    except ValueError:
+                        pass
+            if float_count / len(sample) > 0.8:
+                return 'float'
+        except Exception:
+            pass
+        
+        # Check for date
+        date_patterns = [
+            r'^\d{4}-\d{2}-\d{2}$',  # YYYY-MM-DD
+            r'^\d{2}/\d{2}/\d{4}$',  # MM/DD/YYYY
+            r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}',  # ISO datetime
+        ]
+        date_count = 0
+        for x in sample:
+            if isinstance(x, str):
+                for pattern in date_patterns:
+                    if re.match(pattern, x):
+                        date_count += 1
+                        break
+        if date_count / len(sample) > 0.8:
+            return 'date'
+        
+        # Default to string
+        return 'string'
+    
+    def _detect_patterns(self, data: List[Any], config: ProfilingConfig) -> List[str]:
+        """Detect common patterns in the data."""
+        if not data:
+            return []
+        
+        patterns = []
+        str_data = [str(x) for x in data if x is not None]
+        sample = str_data[:min(1000, len(str_data))]  # Sample for performance
+        
+        # Check against known patterns
+        for pattern_name, pattern_regex in config.validity_patterns.items():
+            try:
+                matches = sum(1 for x in sample if re.match(pattern_regex, x))
+                if matches / len(sample) > 0.7:  # 70% match threshold
+                    patterns.append(pattern_name)
+            except Exception:
+                pass
+        
+        return patterns
+    
+    def _calculate_format_consistency(self, data: List[Any], patterns: List[str]) -> float:
+        """Calculate format consistency score."""
+        if not data or not patterns:
+            return 1.0
+        
+        # If we detected patterns, check how consistently they appear
+        str_data = [str(x) for x in data if x is not None]
+        if not str_data:
+            return 1.0
+        
+        # For simplicity, return high consistency if patterns were detected
+        return 0.9 if patterns else 0.7
+    
+    def _calculate_validity_score(self, data: List[Any], config: ProfilingConfig) -> float:
+        """Calculate validity score based on pattern matching and data constraints."""
+        if not data:
+            return 1.0
+        
+        # Basic validity checks
+        str_data = [str(x) for x in data if x is not None]
+        sample = str_data[:min(1000, len(str_data))]
+        
+        # Check for obviously invalid values
+        invalid_count = 0
+        for value in sample:
+            # Check for common invalid patterns
+            if value.lower() in ['null', 'none', 'n/a', 'na', '', 'undefined', 'nil']:
+                invalid_count += 1
+            elif len(value) == 0:
+                invalid_count += 1
+        
+        validity_score = max(0, 1.0 - (invalid_count / len(sample)))
+        return validity_score
+    
+    def _detect_outliers(self, data: List[Any], config: ProfilingConfig) -> List[Any]:
+        """Detect outliers using the configured method."""
+        numeric_data = []
+        try:
+            numeric_data = [float(x) for x in data if x is not None and isinstance(x, (int, float))]
+        except Exception:
+            return []
+        
+        if len(numeric_data) < 4:  # Need minimum data for outlier detection
+            return []
+        
+        outliers = []
+        
+        if config.outlier_method == "iqr":
+            outliers = self._detect_outliers_iqr(numeric_data, config.outlier_threshold)
+        elif config.outlier_method == "zscore":
+            outliers = self._detect_outliers_zscore(numeric_data, config.zscore_threshold)
+        elif config.outlier_method == "isolation_forest":
+            # Simplified isolation forest - in practice would use sklearn
+            outliers = self._detect_outliers_simple_isolation(numeric_data)
+        
+        return outliers
+    
+    def _detect_outliers_iqr(self, data: List[float], threshold: float) -> List[float]:
+        """Detect outliers using Interquartile Range method."""
+        if len(data) < 4:
+            return []
+        
+        try:
+            q1 = self._calculate_percentile(data, 25)
+            q3 = self._calculate_percentile(data, 75)
+            iqr = q3 - q1
+            
+            lower_bound = q1 - threshold * iqr
+            upper_bound = q3 + threshold * iqr
+            
+            outliers = [x for x in data if x < lower_bound or x > upper_bound]
+            return outliers
+        except Exception:
+            return []
+    
+    def _detect_outliers_zscore(self, data: List[float], threshold: float) -> List[float]:
+        """Detect outliers using Z-score method."""
+        if len(data) < 2:
+            return []
+        
+        try:
+            mean_val = statistics.mean(data)
+            std_val = statistics.stdev(data)
+            
+            if std_val == 0:
+                return []
+            
+            outliers = []
+            for x in data:
+                z_score = abs((x - mean_val) / std_val)
+                if z_score > threshold:
+                    outliers.append(x)
+            
+            return outliers
+        except Exception:
+            return []
+    
+    def _detect_outliers_simple_isolation(self, data: List[float]) -> List[float]:
+        """Simple isolation forest approximation."""
+        if len(data) < 10:
+            return []
+        
+        # Simple approximation: values more than 2.5 std devs from median
+        try:
+            median_val = statistics.median(data)
+            std_val = statistics.stdev(data)
+            threshold = 2.5 * std_val
+            
+            outliers = [x for x in data if abs(x - median_val) > threshold]
+            return outliers
+        except Exception:
+            return []
+    
+    def _calculate_percentile(self, data: List[float], percentile: float) -> float:
+        """Calculate percentile value."""
+        if not data:
+            return 0.0
+        
+        sorted_data = sorted(data)
+        n = len(sorted_data)
+        k = (percentile / 100) * (n - 1)
+        
+        if k == int(k):
+            return sorted_data[int(k)]
+        else:
+            lower = sorted_data[int(k)]
+            upper = sorted_data[int(k) + 1]
+            fraction = k - int(k)
+            return lower + fraction * (upper - lower)
+    
+    def _calculate_sparsity(self, data: Dict[str, List], columns: List[str], total_records: int) -> float:
+        """Calculate dataset sparsity (percentage of null values)."""
+        if not columns or total_records == 0:
+            return 0.0
+        
+        total_cells = len(columns) * total_records
+        null_cells = 0
+        
+        for column in columns:
+            column_data = data.get(column, [])
+            null_cells += sum(1 for x in column_data if x is None)
+        
+        return (null_cells / total_cells * 100) if total_cells > 0 else 0.0
+    
+    def _analyze_correlations(self, sample_data: Dict[str, Any], column_profiles: List[ColumnProfile]) -> Dict[str, Any]:
+        """Analyze correlations between numeric columns."""
+        numeric_columns = [cp.name for cp in column_profiles if cp.data_type in ['integer', 'float']]
+        correlations = {}
+        
+        if len(numeric_columns) < 2:
+            return correlations
+        
+        data = sample_data.get("data", {})
+        
+        # Calculate correlations between numeric columns
+        for i, col1 in enumerate(numeric_columns):
+            for col2 in numeric_columns[i+1:]:
+                try:
+                    col1_data = [float(x) for x in data.get(col1, []) if x is not None and isinstance(x, (int, float))]
+                    col2_data = [float(x) for x in data.get(col2, []) if x is not None and isinstance(x, (int, float))]
+                    
+                    # Align data (same indices)
+                    min_len = min(len(col1_data), len(col2_data))
+                    if min_len > 10:  # Need sufficient data
+                        correlation = self._calculate_correlation(col1_data[:min_len], col2_data[:min_len])
+                        if abs(correlation) > 0.3:  # Only report significant correlations
+                            correlations[f"{col1}_vs_{col2}"] = {
+                                "correlation": correlation,
+                                "strength": "strong" if abs(correlation) > 0.7 else "moderate",
+                                "direction": "positive" if correlation > 0 else "negative"
+                            }
+                except Exception:
+                    continue
+        
+        return correlations
+    
+    def _calculate_correlation(self, x: List[float], y: List[float]) -> float:
+        """Calculate Pearson correlation coefficient."""
+        if len(x) != len(y) or len(x) < 2:
+            return 0.0
+        
+        try:
+            n = len(x)
+            sum_x = sum(x)
+            sum_y = sum(y)
+            sum_x_sq = sum(xi**2 for xi in x)
+            sum_y_sq = sum(yi**2 for yi in y)
+            sum_xy = sum(xi * yi for xi, yi in zip(x, y))
+            
+            numerator = n * sum_xy - sum_x * sum_y
+            denominator = ((n * sum_x_sq - sum_x**2) * (n * sum_y_sq - sum_y**2))**0.5
+            
+            if denominator == 0:
+                return 0.0
+            
+            return numerator / denominator
+        except Exception:
+            return 0.0
+    
+    def _calculate_overall_quality_score(self, column_profiles: List[ColumnProfile]) -> float:
+        """Calculate overall data quality score."""
+        if not column_profiles:
+            return 1.0
+        
+        # Weighted average of quality dimensions
+        completeness_scores = [cp.completeness_score for cp in column_profiles]
+        validity_scores = [cp.validity_score for cp in column_profiles]
+        consistency_scores = [cp.consistency_score for cp in column_profiles]
+        
+        # Calculate averages
+        avg_completeness = statistics.mean(completeness_scores)
+        avg_validity = statistics.mean(validity_scores)
+        avg_consistency = statistics.mean(consistency_scores)
+        
+        # Weight the dimensions (completeness is most important)
+        overall_score = (
+            avg_completeness * 0.4 +
+            avg_validity * 0.3 +
+            avg_consistency * 0.3
+        )
+        
+        return round(overall_score, 3)
+    
+    def _generate_profiling_recommendations(self, column_profiles: List[ColumnProfile], overall_quality: float) -> List[str]:
+        """Generate actionable recommendations based on profiling results."""
+        recommendations = []
+        
+        # Check for data quality issues
+        high_null_columns = [cp for cp in column_profiles if cp.null_percentage > 20]
+        if high_null_columns:
+            col_names = ", ".join([cp.name for cp in high_null_columns[:3]])
+            recommendations.append(f"Address high null percentages in columns: {col_names}")
+        
+        # Check for outliers
+        outlier_columns = [cp for cp in column_profiles if cp.outlier_percentage > 5]
+        if outlier_columns:
+            col_names = ", ".join([cp.name for cp in outlier_columns[:3]])
+            recommendations.append(f"Investigate outliers in columns: {col_names}")
+        
+        # Check for low uniqueness (potential categorical columns)
+        low_unique_columns = [cp for cp in column_profiles if cp.unique_percentage < 10 and cp.unique_count > 1]
+        if low_unique_columns:
+            col_names = ", ".join([cp.name for cp in low_unique_columns[:3]])
+            recommendations.append(f"Consider indexing categorical columns: {col_names}")
+        
+        # Check for high cardinality
+        high_unique_columns = [cp for cp in column_profiles if cp.unique_percentage > 95 and cp.data_type == 'string']
+        if high_unique_columns:
+            col_names = ", ".join([cp.name for cp in high_unique_columns[:3]])
+            recommendations.append(f"High cardinality detected in: {col_names}. Consider normalization.")
+        
+        # Overall quality recommendations
+        if overall_quality < 0.7:
+            recommendations.append("Overall data quality is below recommended threshold. Implement data validation pipeline.")
+        elif overall_quality < 0.9:
+            recommendations.append("Data quality is good but has room for improvement. Focus on completeness and consistency.")
+        
+        # Performance recommendations
+        total_columns = len(column_profiles)
+        if total_columns > 50:
+            recommendations.append("High column count detected. Consider dimensional modeling or column pruning.")
+        
+        return recommendations
+    
+    def _column_profile_to_dict(self, profile: ColumnProfile) -> Dict[str, Any]:
+        """Convert ColumnProfile to dictionary for JSON serialization."""
+        return {
+            "name": profile.name,
+            "data_type": profile.data_type,
+            "null_count": profile.null_count,
+            "null_percentage": round(profile.null_percentage, 2),
+            "unique_count": profile.unique_count,
+            "unique_percentage": round(profile.unique_percentage, 2),
+            "mean": round(profile.mean, 4) if profile.mean is not None else None,
+            "median": round(profile.median, 4) if profile.median is not None else None,
+            "mode": profile.mode,
+            "std_dev": round(profile.std_dev, 4) if profile.std_dev is not None else None,
+            "min_value": profile.min_value,
+            "max_value": profile.max_value,
+            "percentiles": {k: round(v, 4) for k, v in profile.percentiles.items()} if profile.percentiles else {},
+            "avg_length": round(profile.avg_length, 2) if profile.avg_length is not None else None,
+            "min_length": profile.min_length,
+            "max_length": profile.max_length,
+            "detected_patterns": profile.detected_patterns,
+            "format_consistency": round(profile.format_consistency, 3),
+            "completeness_score": round(profile.completeness_score, 3),
+            "validity_score": round(profile.validity_score, 3),
+            "consistency_score": round(profile.consistency_score, 3),
+            "outlier_count": profile.outlier_count,
+            "outlier_percentage": round(profile.outlier_percentage, 2),
+            "outlier_values": profile.outlier_values[:5]  # Limit to first 5 for readability
+        }
     
     async def _optimize_query(self, task: AgentTask) -> Dict[str, Any]:
         """Optimize database queries for better performance."""
