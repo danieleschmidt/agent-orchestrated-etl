@@ -1,9 +1,8 @@
 """Tests for AWS Secrets Manager integration."""
 
 import json
-import os
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 
 from src.agent_orchestrated_etl.config import (
@@ -139,7 +138,8 @@ class TestAWSSecretsManagerIntegration:
         }
         
         # Mock time progression
-        mock_time.side_effect = [1000, 1000, 1400]  # Cache, check, expire check
+        # First call: cache time, second call: check time (expired), third call: new cache time
+        mock_time.side_effect = [1000, 1400, 1400]  # Cache, expire check, new cache
         
         # First call - should hit AWS and cache
         result1 = self.secret_manager.get_secret("test_key")

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
-from .base_agent import BaseAgent, AgentTask
+from .base_agent import BaseAgent, AgentTask, AgentCapability
 from .communication import AgentCommunicationHub
 from .orchestrator_agent import OrchestratorAgent
 from ..exceptions import CoordinationException
@@ -342,14 +342,26 @@ class AgentCoordinator:
                 workflow_state["agent_assignments"][task.task_id] = suitable_agent
     
     async def _find_suitable_agent(self, task: CoordinationTask, workflow_def: WorkflowDefinition) -> Optional[str]:
-        """Find a suitable agent for a task."""
-        # Simple agent selection based on capabilities
+        """Find a suitable agent for a task using sophisticated capability matching."""
+        # Extract required capabilities from task
+        required_capabilities = self._get_required_capabilities(task)
+        
+        # Score agents based on capability matching
+        agent_scores = []
         for agent_id, agent in self.registered_agents.items():
             if agent_id in workflow_def.agents:
-                # Check if agent has required capabilities  
-                # TODO: Use capabilities for more sophisticated agent selection
-                
-                # Simple matching logic - could be more sophisticated
+                score = self._calculate_agent_score(agent, required_capabilities, task)
+                if score > 0:  # Only consider agents with some capability match
+                    agent_scores.append((agent_id, score))
+        
+        # Sort by score (highest first) and return best match
+        if agent_scores:
+            agent_scores.sort(key=lambda x: x[1], reverse=True)
+            return agent_scores[0][0]
+        
+        # Fallback: try role-based matching if no capability match
+        for agent_id, agent in self.registered_agents.items():
+            if agent_id in workflow_def.agents:
                 if task.task_type in ["extract_data", "transform_data", "load_data"] and agent.config.role.value == "etl_specialist":
                     return agent_id
                 elif task.task_type in ["monitor_pipeline", "check_health"] and agent.config.role.value == "monitor":
@@ -357,8 +369,115 @@ class AgentCoordinator:
                 elif task.task_type in ["create_workflow", "execute_workflow"] and agent.config.role.value == "orchestrator":
                     return agent_id
         
-        # Fallback to any available agent from the workflow
+        # Final fallback to any available agent from the workflow
         return workflow_def.agents[0] if workflow_def.agents else None
+    
+    def _get_required_capabilities(self, task: CoordinationTask) -> List[str]:
+        """Extract required capabilities from task type and metadata."""
+        capability_mapping = {
+            "extract_data": ["data_extraction"],
+            "transform_data": ["data_transformation"],
+            "load_data": ["data_loading"],
+            "validate_data": ["data_validation"],
+            "monitor_pipeline": ["pipeline_monitoring", "health_check"],
+            "check_health": ["health_check", "system_monitoring"],
+            "create_workflow": ["workflow_creation", "orchestration"],
+            "execute_workflow": ["workflow_execution", "orchestration"],
+            "optimize_sql": ["sql_optimization"],
+            "analyze_data": ["data_analysis", "statistical_analysis"],
+        }
+        
+        # Get base capabilities for task type
+        required = capability_mapping.get(task.task_type, [])
+        
+        # Add capabilities based on task data
+        if "data_source" in task.task_data:
+            source_type = task.task_data["data_source"]
+            if source_type == "database":
+                required.extend(["sql_optimization", "database_connectivity"])
+            elif source_type == "cloud":
+                required.extend(["cloud_integration", "api_management"])
+            elif source_type == "streaming":
+                required.extend(["stream_processing", "real_time_analytics"])
+        
+        if "data_format" in task.task_data:
+            data_format = task.task_data["data_format"]
+            if data_format in ["json", "xml"]:
+                required.extend(["data_parsing", "schema_inference"])
+            elif data_format in ["parquet", "avro"]:
+                required.extend(["columnar_processing", "compression_handling"])
+        
+        return list(set(required))  # Remove duplicates
+    
+    def _calculate_agent_score(self, agent: 'BaseAgent', required_capabilities: List[str], task: CoordinationTask) -> float:
+        """Calculate agent suitability score based on capabilities."""
+        if not required_capabilities:
+            return 0.5  # Neutral score if no specific requirements
+        
+        agent_capabilities = agent.get_capabilities()
+        capability_names = {cap.name for cap in agent_capabilities}
+        
+        # Check direct capability matches
+        matches = 0
+        confidence_sum = 0.0
+        
+        for required_cap in required_capabilities:
+            if required_cap in capability_names:
+                matches += 1
+                # Find the capability to get confidence level
+                cap = next((c for c in agent_capabilities if c.name == required_cap), None)
+                if cap:
+                    confidence_sum += cap.confidence_level
+        
+        if matches == 0:
+            return 0.0  # No capability match
+        
+        # Calculate base score from capability matches
+        match_ratio = matches / len(required_capabilities)
+        avg_confidence = confidence_sum / matches
+        base_score = match_ratio * avg_confidence
+        
+        # Apply priority bonus (higher priority tasks get better agents)
+        priority_bonus = task.priority / 10.0 * 0.1  # Up to 10% bonus
+        
+        # Apply input/output type compatibility bonus
+        io_bonus = self._calculate_io_compatibility(agent_capabilities, task)
+        
+        final_score = base_score + priority_bonus + io_bonus
+        return min(final_score, 1.0)  # Cap at 1.0
+    
+    def _calculate_io_compatibility(self, agent_capabilities: List['AgentCapability'], task: CoordinationTask) -> float:
+        """Calculate input/output type compatibility bonus."""
+        # Extract expected input/output types from task
+        task_inputs = set()
+        task_outputs = set()
+        
+        # Infer types from task data
+        if "source_type" in task.task_data:
+            task_inputs.add("source_config")
+        if "target_type" in task.task_data:
+            task_outputs.add("load_results")
+        if "data_format" in task.task_data:
+            task_inputs.add("source_data")
+            task_outputs.add("transformed_data")
+        
+        if not task_inputs and not task_outputs:
+            return 0.0  # No I/O information available
+        
+        # Check compatibility with agent capabilities
+        compatible_inputs = 0
+        compatible_outputs = 0
+        
+        for cap in agent_capabilities:
+            if task_inputs:
+                compatible_inputs += len(set(cap.input_types) & task_inputs)
+            if task_outputs:
+                compatible_outputs += len(set(cap.output_types) & task_outputs)
+        
+        total_required = len(task_inputs) + len(task_outputs)
+        total_compatible = compatible_inputs + compatible_outputs
+        
+        return (total_compatible / total_required * 0.2) if total_required > 0 else 0.0  # Up to 20% bonus
     
     # Coordination pattern implementations
     

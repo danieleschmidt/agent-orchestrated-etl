@@ -1,15 +1,13 @@
 """Tests for S3 data source analysis."""
 
-import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 
 from src.agent_orchestrated_etl.data_source_analysis import (
     S3DataAnalyzer,
     S3AnalysisResult,
     analyze_source,
-    BOTO3_AVAILABLE,
-    FILE_FORMAT_PATTERNS
+    BOTO3_AVAILABLE
 )
 from src.agent_orchestrated_etl.validation import ValidationError
 
@@ -427,9 +425,8 @@ class TestS3AnalysisIntegration:
     def test_boto3_not_available_error(self):
         """Test error when boto3 is not available."""
         with patch('src.agent_orchestrated_etl.data_source_analysis.BOTO3_AVAILABLE', False):
-            analyzer = S3DataAnalyzer()
-            
             with pytest.raises(ValidationError, match="requires boto3"):
+                analyzer = S3DataAnalyzer()
                 analyzer.analyze_s3_source("s3://test-bucket")
     
     def test_cache_stats_empty(self):

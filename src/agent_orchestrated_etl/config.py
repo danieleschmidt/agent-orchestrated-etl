@@ -23,6 +23,13 @@ try:
 except ImportError:
     BOTO3_AVAILABLE = False
 
+try:
+    import hvac
+    from requests.exceptions import RequestException, Timeout, ConnectionError
+    HVAC_AVAILABLE = True
+except ImportError:
+    HVAC_AVAILABLE = False
+
 
 @dataclass
 class SecurityConfig:
@@ -36,6 +43,14 @@ class SecurityConfig:
     aws_secrets_region: str = "us-east-1"
     aws_secrets_prefix: str = "agent-etl/"
     aws_secrets_cache_ttl: int = 300  # 5 minutes
+    
+    # HashiCorp Vault settings
+    vault_url: str = "http://localhost:8200"
+    vault_auth_method: str = "token"  # token, approle, kubernetes, etc.
+    vault_mount_path: str = "secret"
+    vault_secret_path: str = "agent-etl/"
+    vault_cache_ttl: int = 300  # 5 minutes
+    vault_timeout: int = 30  # Request timeout in seconds
     
     # Input validation
     max_dag_id_length: int = 200
@@ -134,6 +149,10 @@ class SecretManager:
         # AWS Secrets Manager caching
         self._aws_secrets_cache: Dict[str, tuple[str, float]] = {}
         self._aws_client: Optional[Any] = None
+        
+        # HashiCorp Vault caching and client
+        self._vault_secrets_cache: Dict[str, tuple[str, float]] = {}
+        self._vault_client: Optional[Any] = None
     
     def get_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Retrieve a secret value.
@@ -262,19 +281,174 @@ class SecretManager:
             raise ValidationError(f"Unexpected error retrieving secret '{secret_name}': {e}")
     
     def _get_vault_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        """Get secret from HashiCorp Vault."""
-        # Placeholder for Vault integration
-        # In a real implementation, this would use hvac
-        raise NotImplementedError("HashiCorp Vault integration not implemented yet")
+        """Get secret from HashiCorp Vault.
+        
+        Args:
+            key: The secret key (without prefix)
+            default: Default value if secret is not found
+            
+        Returns:
+            The secret value or default
+            
+        Raises:
+            ValidationError: If Vault is not available or authentication fails
+        """
+        if not HVAC_AVAILABLE:
+            raise ValidationError(
+                "HashiCorp Vault integration requires hvac library. "
+                "Install with: pip install hvac"
+            )
+        
+        # Construct full secret path
+        secret_path = f"{self.security_config.vault_secret_path}{key}"
+        cache_key = f"{self.security_config.vault_mount_path}/{secret_path}"
+        
+        # Check cache first
+        if cache_key in self._vault_secrets_cache:
+            cached_value, cache_time = self._vault_secrets_cache[cache_key]
+            if time.time() - cache_time < self.security_config.vault_cache_ttl:
+                return cached_value
+            else:
+                # Cache expired, remove entry
+                del self._vault_secrets_cache[cache_key]
+        
+        try:
+            # Get or create Vault client
+            vault_client = self._get_vault_client()
+            
+            # Read secret from Vault
+            try:
+                # For KV v2 secrets engine
+                if vault_client.is_secret_backend_mounted(self.security_config.vault_mount_path):
+                    response = vault_client.secrets.kv.v2.read_secret_version(
+                        path=secret_path,
+                        mount_point=self.security_config.vault_mount_path
+                    )
+                    secret_data = response['data']['data']
+                else:
+                    # Fallback to KV v1 or generic read
+                    response = vault_client.read(f"{self.security_config.vault_mount_path}/{secret_path}")
+                    secret_data = response['data'] if response else None
+                
+                if not secret_data:
+                    return default
+                
+                # Extract secret value
+                secret_value = None
+                if key in secret_data:
+                    # Direct key match
+                    secret_value = str(secret_data[key])
+                elif len(secret_data) == 1:
+                    # Single key-value pair, return the value
+                    secret_value = str(next(iter(secret_data.values())))
+                else:
+                    # Multiple keys, try common patterns
+                    for common_key in ['value', 'password', 'secret', 'token']:
+                        if common_key in secret_data:
+                            secret_value = str(secret_data[common_key])
+                            break
+                
+                if secret_value is None:
+                    return default
+                
+                # Cache the result
+                self._vault_secrets_cache[cache_key] = (secret_value, time.time())
+                return secret_value
+                
+            except hvac.exceptions.InvalidPath:
+                # Secret path not found
+                return default
+            except hvac.exceptions.Forbidden as e:
+                raise ValidationError(f"Access denied to Vault secret '{secret_path}': {e}")
+            except hvac.exceptions.Unauthorized as e:
+                raise ValidationError(f"Unauthorized access to Vault: {e}. Check authentication credentials.")
+                
+        except (RequestException, Timeout, ConnectionError) as e:
+            raise ValidationError(f"Network error connecting to Vault: {e}")
+        except hvac.exceptions.VaultError as e:
+            raise ValidationError(f"Vault error retrieving secret '{secret_path}': {e}")
+        except Exception as e:
+            raise ValidationError(f"Unexpected error retrieving Vault secret '{secret_path}': {e}")
+    
+    def _get_vault_client(self):
+        """Get or create Vault client with proper authentication."""
+        if self._vault_client is None:
+            if not HVAC_AVAILABLE:
+                raise ValidationError("hvac library not available")
+            
+            # Create Vault client
+            self._vault_client = hvac.Client(
+                url=self.security_config.vault_url,
+                timeout=self.security_config.vault_timeout
+            )
+            
+            # Authenticate based on configured method
+            auth_method = self.security_config.vault_auth_method.lower()
+            
+            if auth_method == "token":
+                # Token-based authentication
+                token = os.getenv("VAULT_TOKEN")
+                if not token:
+                    raise ValidationError(
+                        "VAULT_TOKEN environment variable required for token authentication"
+                    )
+                self._vault_client.token = token
+                
+            elif auth_method == "approle":
+                # AppRole authentication
+                role_id = os.getenv("VAULT_ROLE_ID")
+                secret_id = os.getenv("VAULT_SECRET_ID")
+                if not role_id or not secret_id:
+                    raise ValidationError(
+                        "VAULT_ROLE_ID and VAULT_SECRET_ID environment variables required for AppRole authentication"
+                    )
+                
+                auth_response = self._vault_client.auth.approle.login(
+                    role_id=role_id,
+                    secret_id=secret_id
+                )
+                self._vault_client.token = auth_response['auth']['client_token']
+                
+            elif auth_method == "kubernetes":
+                # Kubernetes authentication
+                jwt_path = os.getenv("VAULT_K8S_JWT_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token")
+                role = os.getenv("VAULT_K8S_ROLE")
+                
+                if not role:
+                    raise ValidationError("VAULT_K8S_ROLE environment variable required for Kubernetes authentication")
+                
+                try:
+                    with open(jwt_path, 'r') as f:
+                        jwt = f.read().strip()
+                except FileNotFoundError:
+                    raise ValidationError(f"Kubernetes JWT not found at {jwt_path}")
+                
+                auth_response = self._vault_client.auth.kubernetes.login(
+                    role=role,
+                    jwt=jwt
+                )
+                self._vault_client.token = auth_response['auth']['client_token']
+                
+            else:
+                raise ValidationError(f"Unsupported Vault authentication method: {auth_method}")
+            
+            # Verify authentication worked
+            if not self._vault_client.is_authenticated():
+                raise ValidationError("Failed to authenticate with Vault")
+        
+        return self._vault_client
     
     def clear_cache(self) -> None:
         """Clear the secrets cache (useful for testing or forced refresh)."""
         self._aws_secrets_cache.clear()
+        self._vault_secrets_cache.clear()
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics for monitoring."""
         current_time = time.time()
-        cache_stats = {
+        
+        # AWS Secrets Manager cache stats
+        aws_stats = {
             "total_entries": len(self._aws_secrets_cache),
             "expired_entries": 0,
             "valid_entries": 0,
@@ -282,11 +456,35 @@ class SecretManager:
         
         for _, (_, cache_time) in self._aws_secrets_cache.items():
             if current_time - cache_time >= self.security_config.aws_secrets_cache_ttl:
-                cache_stats["expired_entries"] += 1
+                aws_stats["expired_entries"] += 1
             else:
-                cache_stats["valid_entries"] += 1
+                aws_stats["valid_entries"] += 1
         
-        return cache_stats
+        # Vault cache stats
+        vault_stats = {
+            "total_entries": len(self._vault_secrets_cache),
+            "expired_entries": 0,
+            "valid_entries": 0,
+        }
+        
+        for _, (_, cache_time) in self._vault_secrets_cache.items():
+            if current_time - cache_time >= self.security_config.vault_cache_ttl:
+                vault_stats["expired_entries"] += 1
+            else:
+                vault_stats["valid_entries"] += 1
+        
+        # Combined stats
+        total_entries = aws_stats["total_entries"] + vault_stats["total_entries"]
+        total_expired = aws_stats["expired_entries"] + vault_stats["expired_entries"]
+        total_valid = aws_stats["valid_entries"] + vault_stats["valid_entries"]
+        
+        return {
+            "total_entries": total_entries,
+            "expired_entries": total_expired,
+            "valid_entries": total_valid,
+            "aws_secrets": aws_stats,
+            "vault_secrets": vault_stats
+        }
 
 
 def load_default_config() -> AppConfig:
