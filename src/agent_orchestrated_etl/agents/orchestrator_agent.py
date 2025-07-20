@@ -135,7 +135,7 @@ Respond in JSON format when structured data is requested, otherwise provide clea
             # Extract workflow requirements
             requirements = task.inputs.get("requirements", {})
             data_source = requirements.get("data_source")
-            target = requirements.get("target")
+            # TODO: Use target for workflow routing
             workflow_id = task.inputs.get("workflow_id", f"workflow_{int(time.time())}")
             
             if not data_source:
@@ -618,12 +618,7 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
         """Handle step failure with recovery strategies."""
         step_name = step.get("name", "unknown_step")
         
-        recovery_strategies = [
-            "retry_with_backoff",
-            "use_alternative_approach",
-            "skip_with_warning",
-            "fail_workflow",
-        ]
+        # TODO: Implement sophisticated recovery strategies
         
         # Simple recovery logic - in practice, this would be more sophisticated
         if "network" in str(error).lower():

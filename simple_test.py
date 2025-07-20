@@ -8,23 +8,33 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 def test_imports():
     """Test that we can import the core modules."""
     try:
-        # Test basic imports
+        # Test basic imports and verify they're usable
         from agent_orchestrated_etl.exceptions import AgentETLException, AgentException
+        assert issubclass(AgentETLException, Exception)
+        assert issubclass(AgentException, AgentETLException)
         print("✓ Exception classes imported successfully")
         
         from agent_orchestrated_etl.validation import validate_dag_id, validate_task_name
+        assert callable(validate_dag_id)
+        assert callable(validate_task_name)
         print("✓ Validation functions imported successfully")
         
         from agent_orchestrated_etl.retry import RetryConfig, RetryConfigs
+        assert hasattr(RetryConfig, 'max_attempts')
+        assert hasattr(RetryConfigs, 'STANDARD')
         print("✓ Retry classes imported successfully")
         
         from agent_orchestrated_etl.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
+        assert hasattr(CircuitBreakerConfig, 'failure_threshold')
+        assert hasattr(CircuitBreaker, 'call')
         print("✓ Circuit breaker classes imported successfully")
         
         from agent_orchestrated_etl.graceful_degradation import DegradationConfig
+        assert hasattr(DegradationConfig, 'fallback_strategy')
         print("✓ Graceful degradation classes imported successfully")
         
         from agent_orchestrated_etl.logging_config import get_logger
+        assert callable(get_logger)
         print("✓ Logging config imported successfully")
         
         print("\n✓ All core components imported successfully!")

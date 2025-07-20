@@ -488,23 +488,23 @@ class AgentTestFramework:
         validation_errors = []
         
         # Check required fields
-        for field in expected.get("required_fields", []):
-            if field not in result:
-                validation_errors.append(f"Missing required field: {field}")
+        for required_field in expected.get("required_fields", []):
+            if required_field not in result:
+                validation_errors.append(f"Missing required field: {required_field}")
         
         # Check specific values
-        for field, expected_value in expected.get("expected_values", {}).items():
-            if field in result and result[field] != expected_value:
-                validation_errors.append(f"Field {field}: expected {expected_value}, got {result[field]}")
+        for result_field, expected_value in expected.get("expected_values", {}).items():
+            if result_field in result and result[result_field] != expected_value:
+                validation_errors.append(f"Field {result_field}: expected {expected_value}, got {result[result_field]}")
         
         # Check value ranges
-        for field, range_config in expected.get("value_ranges", {}).items():
-            if field in result:
-                value = result[field]
+        for range_field, range_config in expected.get("value_ranges", {}).items():
+            if range_field in result:
+                value = result[range_field]
                 if "min" in range_config and value < range_config["min"]:
-                    validation_errors.append(f"Field {field} below minimum: {value} < {range_config['min']}")
+                    validation_errors.append(f"Field {range_field} below minimum: {value} < {range_config['min']}")
                 if "max" in range_config and value > range_config["max"]:
-                    validation_errors.append(f"Field {field} above maximum: {value} > {range_config['max']}")
+                    validation_errors.append(f"Field {range_field} above maximum: {value} > {range_config['max']}")
         
         # Check status
         expected_status = expected.get("status")
@@ -541,7 +541,7 @@ class AgentTestFramework:
     def create_sample_tests(self) -> None:
         """Create sample test cases for demonstration."""
         # Create orchestrator test suite
-        orchestrator_suite = self.create_test_suite(
+        self.create_test_suite(
             "orchestrator_tests",
             "Orchestrator Agent Tests",
             "Test suite for orchestrator agent functionality"
@@ -575,7 +575,7 @@ class AgentTestFramework:
         self.add_test_case("orchestrator_tests", workflow_creation_test)
         
         # Create ETL agent test suite
-        etl_suite = self.create_test_suite(
+        self.create_test_suite(
             "etl_tests",
             "ETL Agent Tests",
             "Test suite for ETL agent functionality"

@@ -1,9 +1,7 @@
 """Tests for the agent framework components."""
 
 import pytest
-import asyncio
 import time
-from unittest.mock import Mock, AsyncMock
 
 from agent_orchestrated_etl.agents.base_agent import BaseAgent, AgentConfig, AgentRole, AgentTask
 from agent_orchestrated_etl.agents.communication import AgentCommunicationHub, Message, MessageType
@@ -12,7 +10,6 @@ from agent_orchestrated_etl.agents.etl_agent import ETLAgent
 from agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
 from agent_orchestrated_etl.agents.coordination import AgentCoordinator, WorkflowDefinition, CoordinationTask, CoordinationPattern
 from agent_orchestrated_etl.agents.testing import AgentTestFramework, TestCase, MockAgent
-from agent_orchestrated_etl.exceptions import AgentException
 
 
 class TestAgent(BaseAgent):
@@ -394,7 +391,7 @@ class TestAgentTestingFramework:
         await test_framework.setup_test_environment()
         
         # Create mock agent
-        mock_agent = test_framework.create_mock_agent(
+        test_framework.create_mock_agent(
             "test_agent",
             AgentRole.ORCHESTRATOR,
             {"test_task": {"status": "completed", "result": "test_result"}},
@@ -498,7 +495,7 @@ class TestAgentIntegration:
             assert "overall_status" in health_result
             
             # Verify agents can communicate
-            message_sent = await orchestrator.send_message(
+            await orchestrator.send_message(
                 etl_agent.config.agent_id,
                 {"type": "status_request", "timestamp": time.time()}
             )

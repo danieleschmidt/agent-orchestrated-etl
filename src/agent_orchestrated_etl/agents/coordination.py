@@ -346,8 +346,8 @@ class AgentCoordinator:
         # Simple agent selection based on capabilities
         for agent_id, agent in self.registered_agents.items():
             if agent_id in workflow_def.agents:
-                # Check if agent has required capabilities
-                capabilities = [cap.name for cap in agent.get_capabilities()]
+                # Check if agent has required capabilities  
+                # TODO: Use capabilities for more sophisticated agent selection
                 
                 # Simple matching logic - could be more sophisticated
                 if task.task_type in ["extract_data", "transform_data", "load_data"] and agent.config.role.value == "etl_specialist":

@@ -198,7 +198,8 @@ class ExecutePipelineTool(ETLTool):
         from ..orchestrator import DataOrchestrator
         
         try:
-            orchestrator = DataOrchestrator()
+            # Initialize orchestrator for pipeline execution
+            DataOrchestrator()
             
             # This is a simplified version - in practice, you'd create a full pipeline
             execution_result = {

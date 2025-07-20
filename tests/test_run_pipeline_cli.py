@@ -84,7 +84,8 @@ def test_run_pipeline_monitor_log_on_failure(tmp_path, monkeypatch):
     orig = orchestrator.DataOrchestrator.create_pipeline
 
     def fake_create_pipeline(self, source: str, dag_id: str = "generated"):
-        pipeline = orig(self, source, dag_id=dag_id)
+        # Disable graceful degradation to ensure failures are logged
+        pipeline = orig(self, source, dag_id=dag_id, enable_graceful_degradation=False)
         pipeline.operations["load"] = bad_load
         return pipeline
 
@@ -95,12 +96,11 @@ def test_run_pipeline_monitor_log_on_failure(tmp_path, monkeypatch):
     )
 
     exit_code = cli.run_pipeline_cmd(["s3", "--monitor", str(log_file)])
-    # With graceful degradation enabled, pipeline may succeed despite task failures
-    # The important thing is that errors are logged to the monitor
+    # With graceful degradation disabled, pipeline should fail and log errors
     content = log_file.read_text()
     assert "ERROR:" in content  # nosec B101
-    # Pipeline should succeed due to graceful degradation
-    assert exit_code == 0  # nosec B101
+    # Pipeline should fail due to disabled graceful degradation
+    assert exit_code == 1  # nosec B101
 
 
 def test_run_pipeline_monitor_invalid_source(tmp_path):

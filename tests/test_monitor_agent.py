@@ -14,7 +14,9 @@ def test_monitor_logs_pipeline_execution():
 
 def test_monitor_logs_errors():
     orch = orchestrator.DataOrchestrator()
-    pipeline = orch.create_pipeline("s3", operations={"load": lambda _d: 1 / 0})
+    # Disable graceful degradation to ensure exception propagation
+    pipeline = orch.create_pipeline("s3", operations={"load": lambda _d: 1 / 0}, 
+                                   enable_graceful_degradation=False)
     monitor = orchestrator.MonitorAgent()
     with pytest.raises(Exception):  # Pipeline wraps exceptions
         pipeline.execute(monitor=monitor)

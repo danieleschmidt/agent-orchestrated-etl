@@ -163,7 +163,7 @@ class SecretManager:
         raise NotImplementedError("HashiCorp Vault integration not implemented yet")
 
 
-def load_config() -> AppConfig:
+def load_default_config() -> AppConfig:
     """Load configuration from environment variables and defaults.
     
     Returns:
@@ -471,8 +471,7 @@ class ConfigManager:
     def reload_config(self):
         """Manually reload configuration."""
         try:
-            old_config = self._config
-            new_config = self.load_config(
+            self.load_config(
                 self.config_file_path,
                 enable_hot_reload=False  # Don't restart watchers
             )
