@@ -24,6 +24,7 @@ from agent_orchestrated_etl.circuit_breaker import (
     CircuitBreakerConfig,
     CircuitState,
     circuit_breaker_registry,
+    circuit_breaker,
 )
 from agent_orchestrated_etl.graceful_degradation import (
     DegradationConfig,
