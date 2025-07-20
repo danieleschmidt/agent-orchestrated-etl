@@ -16,6 +16,13 @@ from watchdog.events import FileSystemEventHandler
 
 from .validation import validate_environment_variable, ValidationError
 
+try:
+    import boto3
+    from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
+
 
 @dataclass
 class SecurityConfig:
@@ -24,6 +31,11 @@ class SecurityConfig:
     # Secret management
     secret_provider: str = "env"  # env, aws_secrets, vault, etc.
     secret_prefix: str = "AGENT_ETL_"
+    
+    # AWS Secrets Manager settings
+    aws_secrets_region: str = "us-east-1"
+    aws_secrets_prefix: str = "agent-etl/"
+    aws_secrets_cache_ttl: int = 300  # 5 minutes
     
     # Input validation
     max_dag_id_length: int = 200
@@ -114,9 +126,14 @@ class AppConfig:
 class SecretManager:
     """Manages secret retrieval from various sources."""
     
-    def __init__(self, provider: str = "env", prefix: str = "AGENT_ETL_"):
+    def __init__(self, provider: str = "env", prefix: str = "AGENT_ETL_", security_config: Optional[SecurityConfig] = None):
         self.provider = provider
         self.prefix = prefix
+        self.security_config = security_config or SecurityConfig()
+        
+        # AWS Secrets Manager caching
+        self._aws_secrets_cache: Dict[str, tuple[str, float]] = {}
+        self._aws_client: Optional[Any] = None
     
     def get_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Retrieve a secret value.
@@ -151,16 +168,125 @@ class SecretManager:
             return None
     
     def _get_aws_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        """Get secret from AWS Secrets Manager."""
-        # Placeholder for AWS Secrets Manager integration
-        # In a real implementation, this would use boto3
-        raise NotImplementedError("AWS Secrets Manager integration not implemented yet")
+        """Get secret from AWS Secrets Manager.
+        
+        Args:
+            key: The secret key (without prefix)
+            default: Default value if secret is not found
+            
+        Returns:
+            The secret value or default
+            
+        Raises:
+            ValidationError: If AWS Secrets Manager is not available or authentication fails
+        """
+        if not BOTO3_AVAILABLE:
+            raise ValidationError(
+                "AWS Secrets Manager integration requires boto3. "
+                "Install with: pip install boto3"
+            )
+        
+        # Construct the secret name with prefix
+        secret_name = f"{self.security_config.aws_secrets_prefix}{key.lower()}"
+        
+        # Check cache first
+        if secret_name in self._aws_secrets_cache:
+            cached_value, cache_time = self._aws_secrets_cache[secret_name]
+            if time.time() - cache_time < self.security_config.aws_secrets_cache_ttl:
+                return cached_value
+            else:
+                # Cache expired, remove entry
+                del self._aws_secrets_cache[secret_name]
+        
+        try:
+            # Initialize AWS client if needed
+            if self._aws_client is None:
+                self._aws_client = boto3.client(
+                    'secretsmanager',
+                    region_name=self.security_config.aws_secrets_region
+                )
+            
+            # Retrieve the secret
+            response = self._aws_client.get_secret_value(SecretName=secret_name)
+            
+            # Extract the secret value
+            if 'SecretString' in response:
+                secret_value = response['SecretString']
+                
+                # Try to parse as JSON in case it's a key-value secret
+                try:
+                    secret_dict = json.loads(secret_value)
+                    if isinstance(secret_dict, dict) and key in secret_dict:
+                        secret_value = secret_dict[key]
+                    elif isinstance(secret_dict, dict) and len(secret_dict) == 1:
+                        # Single key-value pair, use the value
+                        secret_value = next(iter(secret_dict.values()))
+                except json.JSONDecodeError:
+                    # Not JSON, use the raw string value
+                    pass
+                
+                # Cache the result
+                self._aws_secrets_cache[secret_name] = (secret_value, time.time())
+                
+                return secret_value
+            else:
+                # Binary secret (not typical for configuration)
+                raise ValidationError(f"Binary secret '{secret_name}' is not supported")
+                
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            
+            if error_code == 'ResourceNotFoundException':
+                # Secret not found, return default
+                if default is not None:
+                    return default
+                return None
+            elif error_code == 'InvalidRequestException':
+                raise ValidationError(f"Invalid secret name '{secret_name}': {e}")
+            elif error_code == 'InvalidParameterException':
+                raise ValidationError(f"Invalid parameter for secret '{secret_name}': {e}")
+            elif error_code == 'DecryptionFailure':
+                raise ValidationError(f"Failed to decrypt secret '{secret_name}': {e}")
+            elif error_code == 'InternalServiceError':
+                raise ValidationError(f"AWS Secrets Manager internal error for '{secret_name}': {e}")
+            else:
+                raise ValidationError(f"AWS Secrets Manager error for '{secret_name}': {e}")
+                
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            raise ValidationError(
+                f"AWS credentials not configured properly for Secrets Manager: {e}. "
+                "Ensure AWS credentials are set via environment variables, "
+                "IAM role, or AWS credentials file."
+            )
+        except Exception as e:
+            raise ValidationError(f"Unexpected error retrieving secret '{secret_name}': {e}")
     
     def _get_vault_secret(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get secret from HashiCorp Vault."""
         # Placeholder for Vault integration
         # In a real implementation, this would use hvac
         raise NotImplementedError("HashiCorp Vault integration not implemented yet")
+    
+    def clear_cache(self) -> None:
+        """Clear the secrets cache (useful for testing or forced refresh)."""
+        self._aws_secrets_cache.clear()
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics for monitoring."""
+        current_time = time.time()
+        cache_stats = {
+            "total_entries": len(self._aws_secrets_cache),
+            "expired_entries": 0,
+            "valid_entries": 0,
+        }
+        
+        for _, (_, cache_time) in self._aws_secrets_cache.items():
+            if current_time - cache_time >= self.security_config.aws_secrets_cache_ttl:
+                cache_stats["expired_entries"] += 1
+            else:
+                cache_stats["valid_entries"] += 1
+        
+        return cache_stats
 
 
 def load_default_config() -> AppConfig:
@@ -173,15 +299,22 @@ def load_default_config() -> AppConfig:
         ValidationError: If configuration validation fails
     """
     config = AppConfig()
-    secret_manager = SecretManager()
+    
+    # Initialize secret manager with security config
+    config.security.secret_provider = os.getenv("AGENT_ETL_SECRET_PROVIDER", "env")
+    config.security.secret_prefix = os.getenv("AGENT_ETL_SECRET_PREFIX", "AGENT_ETL_")
+    config.security.aws_secrets_region = os.getenv("AGENT_ETL_AWS_SECRETS_REGION", "us-east-1")
+    config.security.aws_secrets_prefix = os.getenv("AGENT_ETL_AWS_SECRETS_PREFIX", "agent-etl/")
+    
+    secret_manager = SecretManager(
+        provider=config.security.secret_provider,
+        prefix=config.security.secret_prefix,
+        security_config=config.security
+    )
     
     # Load environment
     config.environment = os.getenv("AGENT_ETL_ENVIRONMENT", "development")
     config.debug = os.getenv("AGENT_ETL_DEBUG", "false").lower() == "true"
-    
-    # Load security config
-    config.security.secret_provider = os.getenv("AGENT_ETL_SECRET_PROVIDER", "env")
-    config.security.secret_prefix = os.getenv("AGENT_ETL_SECRET_PREFIX", "AGENT_ETL_")
     
     # Load database config
     config.database.host = secret_manager.get_secret("DB_HOST")
@@ -347,7 +480,18 @@ class ConfigManager:
     def _load_base_config(self) -> AppConfig:
         """Load base configuration with defaults."""
         config = AppConfig()
-        secret_manager = SecretManager()
+        
+        # Initialize secret manager with security config
+        config.security.secret_provider = os.getenv("AGENT_ETL_SECRET_PROVIDER", "env")
+        config.security.secret_prefix = os.getenv("AGENT_ETL_SECRET_PREFIX", "AGENT_ETL_")
+        config.security.aws_secrets_region = os.getenv("AGENT_ETL_AWS_SECRETS_REGION", "us-east-1")
+        config.security.aws_secrets_prefix = os.getenv("AGENT_ETL_AWS_SECRETS_PREFIX", "agent-etl/")
+        
+        secret_manager = SecretManager(
+            provider=config.security.secret_provider,
+            prefix=config.security.secret_prefix,
+            security_config=config.security
+        )
         
         # Load environment
         config.environment = os.getenv("AGENT_ETL_ENVIRONMENT", "development")
