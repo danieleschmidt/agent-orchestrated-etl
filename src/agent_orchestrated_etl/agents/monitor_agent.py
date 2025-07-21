@@ -552,9 +552,213 @@ Otherwise, explain what additional information or capabilities would be needed."
     
     async def _check_pipeline_status(self) -> None:
         """Check status of active pipelines."""
-        # This would integrate with the orchestrator to check pipeline status
-        # For now, it's a placeholder
-        pass
+        try:
+            # Get pipeline status from orchestrator agents
+            if self.communication_hub:
+                orchestrator_agents = await self._get_orchestrator_agents()
+                
+                for agent_info in orchestrator_agents:
+                    try:
+                        # Request pipeline status from orchestrator
+                        status_response = await self.communication_hub.send_message(
+                            agent_info["agent_id"],
+                            {
+                                "action": "get_pipeline_status",
+                                "timestamp": time.time(),
+                                "monitoring_scope": self.monitoring_scope
+                            }
+                        )
+                        
+                        if status_response and "pipelines" in status_response:
+                            await self._process_pipeline_status(status_response["pipelines"])
+                            
+                    except Exception as e:
+                        self.logger.warning(f"Failed to get pipeline status from {agent_info['agent_id']}: {e}")
+            
+            # Check for pipeline timeouts and stale executions
+            await self._check_pipeline_timeouts()
+            
+            # Update pipeline health metrics
+            await self._update_pipeline_health_metrics()
+            
+        except Exception as e:
+            self.logger.error(f"Pipeline status check failed: {e}")
+            
+    async def _get_orchestrator_agents(self) -> List[Dict[str, Any]]:
+        """Get list of available orchestrator agents."""
+        if not self.communication_hub:
+            return []
+            
+        try:
+            # Query communication hub for orchestrator agents
+            agents = await self.communication_hub.get_agents_by_role("orchestrator")
+            return agents if agents else []
+        except Exception as e:
+            self.logger.error(f"Failed to get orchestrator agents: {e}")
+            return []
+    
+    async def _process_pipeline_status(self, pipelines: List[Dict[str, Any]]) -> None:
+        """Process pipeline status information and detect issues."""
+        current_time = time.time()
+        
+        for pipeline in pipelines:
+            pipeline_id = pipeline.get("pipeline_id", "unknown")
+            status = pipeline.get("status", "unknown")
+            started_at = pipeline.get("started_at", current_time)
+            tasks = pipeline.get("tasks", [])
+            
+            # Store pipeline status
+            if "pipelines" not in self.performance_metrics:
+                self.performance_metrics["pipelines"] = []
+                
+            pipeline_metric = {
+                "timestamp": current_time,
+                "pipeline_id": pipeline_id,
+                "status": status,
+                "started_at": started_at,
+                "duration": current_time - started_at if started_at else 0,
+                "total_tasks": len(tasks),
+                "completed_tasks": sum(1 for task in tasks if task.get("status") == "completed"),
+                "failed_tasks": sum(1 for task in tasks if task.get("status") == "failed"),
+                "running_tasks": sum(1 for task in tasks if task.get("status") == "running"),
+            }
+            
+            self.performance_metrics["pipelines"].append(pipeline_metric)
+            
+            # Check for alerts
+            await self._check_pipeline_alerts(pipeline_metric)
+            
+            # Store in memory for historical analysis
+            await self.memory.store_entry(
+                content=f"Pipeline {pipeline_id} status: {status}",
+                entry_type=MemoryType.OBSERVATION,
+                importance=MemoryImportance.HIGH if status in ["failed", "timeout"] else MemoryImportance.MEDIUM,
+                metadata={
+                    "pipeline_id": pipeline_id,
+                    "status": status,
+                    "duration": pipeline_metric["duration"],
+                    "task_counts": {
+                        "total": pipeline_metric["total_tasks"],
+                        "completed": pipeline_metric["completed_tasks"],
+                        "failed": pipeline_metric["failed_tasks"],
+                        "running": pipeline_metric["running_tasks"]
+                    }
+                }
+            )
+    
+    async def _check_pipeline_timeouts(self) -> None:
+        """Check for pipeline timeouts and stale executions."""
+        if "pipelines" not in self.performance_metrics:
+            return
+            
+        current_time = time.time()
+        timeout_threshold = self.alert_thresholds.get("pipeline_duration", {}).get("critical", 7200.0)
+        
+        for pipeline_metric in self.performance_metrics["pipelines"]:
+            if pipeline_metric.get("status") == "running":
+                duration = pipeline_metric.get("duration", 0)
+                
+                if duration > timeout_threshold:
+                    await self._trigger_alert(
+                        "pipeline_timeout",
+                        f"Pipeline {pipeline_metric['pipeline_id']} has been running for {duration:.0f} seconds",
+                        "critical",
+                        {
+                            "pipeline_id": pipeline_metric["pipeline_id"],
+                            "duration": duration,
+                            "threshold": timeout_threshold
+                        }
+                    )
+    
+    async def _check_pipeline_alerts(self, pipeline_metric: Dict[str, Any]) -> None:
+        """Check pipeline metrics against alert thresholds."""
+        pipeline_id = pipeline_metric["pipeline_id"]
+        status = pipeline_metric["status"]
+        duration = pipeline_metric["duration"]
+        failed_tasks = pipeline_metric["failed_tasks"]
+        total_tasks = pipeline_metric["total_tasks"]
+        
+        # Check for failed pipelines
+        if status == "failed":
+            await self._trigger_alert(
+                "pipeline_failure",
+                f"Pipeline {pipeline_id} has failed",
+                "critical",
+                pipeline_metric
+            )
+        
+        # Check for high failure rate
+        if total_tasks > 0:
+            failure_rate = (failed_tasks / total_tasks) * 100
+            if failure_rate >= self.alert_thresholds.get("error_rate", {}).get("critical", 10.0):
+                await self._trigger_alert(
+                    "high_task_failure_rate",
+                    f"Pipeline {pipeline_id} has {failure_rate:.1f}% task failure rate",
+                    "critical",
+                    pipeline_metric
+                )
+            elif failure_rate >= self.alert_thresholds.get("error_rate", {}).get("warning", 5.0):
+                await self._trigger_alert(
+                    "moderate_task_failure_rate",
+                    f"Pipeline {pipeline_id} has {failure_rate:.1f}% task failure rate",
+                    "warning",
+                    pipeline_metric
+                )
+        
+        # Check for long running pipelines
+        warning_threshold = self.alert_thresholds.get("pipeline_duration", {}).get("warning", 3600.0)
+        if status == "running" and duration > warning_threshold:
+            await self._trigger_alert(
+                "long_running_pipeline",
+                f"Pipeline {pipeline_id} has been running for {duration:.0f} seconds",
+                "warning",
+                pipeline_metric
+            )
+    
+    async def _update_pipeline_health_metrics(self) -> None:
+        """Update overall pipeline health metrics."""
+        if "pipelines" not in self.performance_metrics:
+            return
+            
+        recent_pipelines = [
+            p for p in self.performance_metrics["pipelines"]
+            if p.get("timestamp", 0) > time.time() - 3600  # Last hour
+        ]
+        
+        if not recent_pipelines:
+            return
+            
+        # Calculate health metrics
+        total_pipelines = len(recent_pipelines)
+        successful_pipelines = sum(1 for p in recent_pipelines if p.get("status") == "completed")
+        failed_pipelines = sum(1 for p in recent_pipelines if p.get("status") == "failed")
+        running_pipelines = sum(1 for p in recent_pipelines if p.get("status") == "running")
+        
+        success_rate = (successful_pipelines / total_pipelines) * 100 if total_pipelines > 0 else 0
+        average_duration = sum(p.get("duration", 0) for p in recent_pipelines if p.get("status") == "completed") / max(successful_pipelines, 1)
+        
+        # Store health metrics
+        health_metric = {
+            "timestamp": time.time(),
+            "total_pipelines": total_pipelines,
+            "successful_pipelines": successful_pipelines,
+            "failed_pipelines": failed_pipelines,
+            "running_pipelines": running_pipelines,
+            "success_rate": success_rate,
+            "average_duration": average_duration
+        }
+        
+        if "pipeline_health" not in self.performance_metrics:
+            self.performance_metrics["pipeline_health"] = []
+            
+        self.performance_metrics["pipeline_health"].append(health_metric)
+        
+        # Keep only recent health metrics (last 24 hours)
+        cutoff_time = time.time() - (24 * 60 * 60)
+        self.performance_metrics["pipeline_health"] = [
+            h for h in self.performance_metrics["pipeline_health"]
+            if h.get("timestamp", 0) > cutoff_time
+        ]
     
     async def _collect_performance_metrics(self) -> None:
         """Collect performance metrics from monitored targets."""
@@ -581,10 +785,244 @@ Otherwise, explain what additional information or capabilities would be needed."
     
     async def _check_agent_health(self) -> None:
         """Check health of other agents in the system."""
-        if self.communication_hub:
-            # This would check the health of registered agents
-            # For now, it's a placeholder
-            pass
+        if not self.communication_hub:
+            return
+            
+        try:
+            # Get all registered agents
+            all_agents = await self.communication_hub.get_all_agents()
+            
+            current_time = time.time()
+            health_checks = []
+            
+            for agent_info in all_agents:
+                agent_id = agent_info.get("agent_id", "unknown")
+                agent_role = agent_info.get("role", "unknown")
+                
+                # Skip checking our own health
+                if agent_id == self.config.agent_id:
+                    continue
+                    
+                # Perform health check
+                health_result = await self._check_single_agent_health(agent_id, agent_role)
+                health_checks.append(health_result)
+                
+                # Store health status
+                self.health_status[agent_id] = health_result["status"]
+                
+                # Store in performance metrics
+                if "agent_health" not in self.performance_metrics:
+                    self.performance_metrics["agent_health"] = []
+                    
+                agent_health_metric = {
+                    "timestamp": current_time,
+                    "agent_id": agent_id,
+                    "agent_role": agent_role,
+                    "status": health_result["status"],
+                    "response_time": health_result.get("response_time", 0),
+                    "last_seen": health_result.get("last_seen", current_time),
+                    "error_message": health_result.get("error_message"),
+                }
+                
+                self.performance_metrics["agent_health"].append(agent_health_metric)
+                
+                # Check for agent health alerts
+                await self._check_agent_health_alerts(agent_health_metric)
+                
+                # Store in memory for historical analysis
+                await self.memory.store_entry(
+                    content=f"Agent {agent_id} ({agent_role}) health: {health_result['status']}",
+                    entry_type=MemoryType.OBSERVATION,
+                    importance=MemoryImportance.HIGH if health_result["status"] == "unhealthy" else MemoryImportance.MEDIUM,
+                    metadata={
+                        "agent_id": agent_id,
+                        "agent_role": agent_role,
+                        "health_status": health_result["status"],
+                        "response_time": health_result.get("response_time", 0)
+                    }
+                )
+            
+            # Clean up old health metrics (keep last 24 hours)
+            cutoff_time = current_time - (24 * 60 * 60)
+            self.performance_metrics["agent_health"] = [
+                h for h in self.performance_metrics["agent_health"]
+                if h.get("timestamp", 0) > cutoff_time
+            ]
+            
+            # Update overall system health
+            await self._update_system_health_metrics(health_checks)
+            
+        except Exception as e:
+            self.logger.error(f"Agent health check failed: {e}")
+    
+    async def _check_single_agent_health(self, agent_id: str, agent_role: str) -> Dict[str, Any]:
+        """Check health of a single agent."""
+        start_time = time.time()
+        
+        try:
+            # Send health check ping
+            health_response = await self.communication_hub.send_message(
+                agent_id,
+                {
+                    "action": "health_check",
+                    "timestamp": start_time,
+                    "monitoring_agent": self.config.agent_id
+                },
+                timeout=10.0  # 10 second timeout
+            )
+            
+            response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            
+            if health_response:
+                # Agent responded - check response details
+                agent_status = health_response.get("status", "unknown")
+                
+                # Consider agent healthy if it responds with "healthy" or "running"
+                is_healthy = agent_status in ["healthy", "running", "active"]
+                
+                return {
+                    "agent_id": agent_id,
+                    "agent_role": agent_role,
+                    "status": "healthy" if is_healthy else "degraded",
+                    "response_time": response_time,
+                    "last_seen": time.time(),
+                    "agent_reported_status": agent_status,
+                    "load": health_response.get("load", 0),
+                    "memory_usage": health_response.get("memory_usage", 0),
+                    "active_tasks": health_response.get("active_tasks", 0)
+                }
+            else:
+                # No response - agent may be unresponsive
+                return {
+                    "agent_id": agent_id,
+                    "agent_role": agent_role,
+                    "status": "unresponsive",
+                    "response_time": response_time,
+                    "last_seen": None,
+                    "error_message": "No response to health check"
+                }
+                
+        except asyncio.TimeoutError:
+            response_time = (time.time() - start_time) * 1000
+            return {
+                "agent_id": agent_id,
+                "agent_role": agent_role,
+                "status": "timeout",
+                "response_time": response_time,
+                "last_seen": None,
+                "error_message": "Health check timed out"
+            }
+        except Exception as e:
+            response_time = (time.time() - start_time) * 1000
+            return {
+                "agent_id": agent_id,
+                "agent_role": agent_role,
+                "status": "error",
+                "response_time": response_time,
+                "last_seen": None,
+                "error_message": str(e)
+            }
+    
+    async def _check_agent_health_alerts(self, agent_metric: Dict[str, Any]) -> None:
+        """Check agent health metrics against alert thresholds."""
+        agent_id = agent_metric["agent_id"]
+        agent_role = agent_metric["agent_role"]
+        status = agent_metric["status"]
+        response_time = agent_metric.get("response_time", 0)
+        
+        # Alert on unhealthy agents
+        if status in ["unresponsive", "error", "timeout"]:
+            await self._trigger_alert(
+                "agent_unhealthy",
+                f"Agent {agent_id} ({agent_role}) is {status}",
+                "critical",
+                agent_metric
+            )
+        elif status == "degraded":
+            await self._trigger_alert(
+                "agent_degraded",
+                f"Agent {agent_id} ({agent_role}) is experiencing degraded performance",
+                "warning",
+                agent_metric
+            )
+        
+        # Alert on slow response times
+        response_time_threshold = self.alert_thresholds.get("response_time", {})
+        if response_time > response_time_threshold.get("critical", 10000):  # 10 seconds
+            await self._trigger_alert(
+                "agent_slow_response",
+                f"Agent {agent_id} ({agent_role}) response time is {response_time:.0f}ms",
+                "critical",
+                agent_metric
+            )
+        elif response_time > response_time_threshold.get("warning", 5000):  # 5 seconds
+            await self._trigger_alert(
+                "agent_slow_response",
+                f"Agent {agent_id} ({agent_role}) response time is {response_time:.0f}ms",
+                "warning",
+                agent_metric
+            )
+    
+    async def _update_system_health_metrics(self, health_checks: List[Dict[str, Any]]) -> None:
+        """Update overall system health metrics based on agent health."""
+        if not health_checks:
+            return
+            
+        total_agents = len(health_checks)
+        healthy_agents = sum(1 for check in health_checks if check["status"] == "healthy")
+        degraded_agents = sum(1 for check in health_checks if check["status"] == "degraded")
+        unhealthy_agents = sum(1 for check in health_checks if check["status"] in ["unresponsive", "error", "timeout"])
+        
+        health_percentage = (healthy_agents / total_agents) * 100 if total_agents > 0 else 0
+        average_response_time = sum(check.get("response_time", 0) for check in health_checks) / max(total_agents, 1)
+        
+        # Calculate system health status
+        if health_percentage >= 90:
+            system_status = "healthy"
+        elif health_percentage >= 70:
+            system_status = "degraded"
+        else:
+            system_status = "unhealthy"
+            
+        # Store system health metrics
+        system_health_metric = {
+            "timestamp": time.time(),
+            "total_agents": total_agents,
+            "healthy_agents": healthy_agents,
+            "degraded_agents": degraded_agents,
+            "unhealthy_agents": unhealthy_agents,
+            "health_percentage": health_percentage,
+            "average_response_time": average_response_time,
+            "system_status": system_status
+        }
+        
+        if "system_health" not in self.performance_metrics:
+            self.performance_metrics["system_health"] = []
+            
+        self.performance_metrics["system_health"].append(system_health_metric)
+        
+        # Keep only recent system health metrics (last 24 hours)
+        cutoff_time = time.time() - (24 * 60 * 60)
+        self.performance_metrics["system_health"] = [
+            h for h in self.performance_metrics["system_health"]
+            if h.get("timestamp", 0) > cutoff_time
+        ]
+        
+        # Alert on poor system health
+        if system_status == "unhealthy":
+            await self._trigger_alert(
+                "system_unhealthy",
+                f"System health is {system_status} - only {health_percentage:.1f}% of agents are healthy",
+                "critical",
+                system_health_metric
+            )
+        elif system_status == "degraded":
+            await self._trigger_alert(
+                "system_degraded",
+                f"System health is {system_status} - {health_percentage:.1f}% of agents are healthy",
+                "warning",
+                system_health_metric
+            )
     
     async def _add_monitoring_target(self, target: str, monitoring_types: List[str]) -> None:
         """Add a new monitoring target."""

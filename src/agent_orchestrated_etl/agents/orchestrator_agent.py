@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any, Dict, List, Optional, Set
@@ -12,8 +13,10 @@ from .base_agent import BaseAgent, AgentConfig, AgentRole, AgentTask, AgentCapab
 from .communication import AgentCommunicationHub
 from .memory import AgentMemory, MemoryType, MemoryImportance
 from .tools import AgentToolRegistry, get_tool_registry
-from ..exceptions import AgentException
+from ..exceptions import AgentException, NetworkException, ExternalServiceException, RateLimitException
 from ..logging_config import LogContext
+from ..retry import RetryConfig, retry, RetryConfigs
+from ..circuit_breaker import CircuitBreakerConfig, circuit_breaker, CircuitBreakerConfigs
 
 
 class OrchestratorAgent(BaseAgent):
@@ -615,30 +618,410 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
             return {"message": f"Generic step {step.get('name', 'unknown')} completed"}
     
     async def _handle_step_failure(self, step: Dict[str, Any], error: Exception, workflow: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle step failure with recovery strategies."""
+        """Handle step failure with sophisticated recovery strategies."""
         step_name = step.get("name", "unknown_step")
+        step_type = step.get("type", "unknown")
+        workflow_id = workflow.get("workflow_id", "unknown")
         
-        # TODO: Implement sophisticated recovery strategies
+        # Initialize failure tracking if not exists
+        if "failure_history" not in workflow:
+            workflow["failure_history"] = []
+            
+        # Record failure
+        failure_record = {
+            "step_name": step_name,
+            "step_type": step_type,
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "timestamp": time.time(),
+            "attempt_number": step.get("attempt_number", 1)
+        }
+        workflow["failure_history"].append(failure_record)
         
-        # Simple recovery logic - in practice, this would be more sophisticated
-        if "network" in str(error).lower():
-            return {
-                "recovery_strategy": "retry_with_backoff",
-                "message": f"Network error in {step_name}, will retry",
-                "error": str(error),
+        # Determine recovery strategy based on error type, step configuration, and failure history
+        recovery_strategy = await self._determine_recovery_strategy(step, error, workflow)
+        
+        # Log recovery decision
+        self.logger.warning(
+            f"Step {step_name} failed in workflow {workflow_id}: {error}. "
+            f"Recovery strategy: {recovery_strategy['strategy']}"
+        )
+        
+        # Store failure information in memory for learning
+        await self.memory.store_entry(
+            content=f"Step failure: {step_name} failed with {type(error).__name__}: {error}",
+            entry_type=MemoryType.OBSERVATION,
+            importance=MemoryImportance.HIGH,
+            metadata={
+                "workflow_id": workflow_id,
+                "step_name": step_name,
+                "error_type": type(error).__name__,
+                "recovery_strategy": recovery_strategy["strategy"],
+                "attempt_number": failure_record["attempt_number"]
             }
-        elif step.get("continue_on_failure", False):
+        )
+        
+        return recovery_strategy
+    
+    async def _determine_recovery_strategy(self, step: Dict[str, Any], error: Exception, workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Determine the best recovery strategy based on error analysis and step configuration."""
+        step_name = step.get("name", "unknown_step")
+        step_type = step.get("type", "unknown")
+        max_retries = step.get("max_retries", 3)
+        current_attempt = step.get("attempt_number", 1)
+        
+        # Extract step configuration
+        step_config = step.get("recovery_config", {})
+        retry_on_failure = step_config.get("retry_on_failure", True)
+        continue_on_failure = step_config.get("continue_on_failure", False)
+        fallback_enabled = step_config.get("fallback_enabled", True)
+        circuit_breaker_enabled = step_config.get("circuit_breaker_enabled", True)
+        
+        # Analyze error type and determine if it's retryable
+        error_analysis = self._analyze_error(error, step, workflow)
+        
+        # Check circuit breaker status
+        circuit_breaker_open = await self._check_circuit_breaker_status(step_name, step_type)
+        
+        # Strategy 1: Immediate retry for transient errors (with exponential backoff)
+        if (error_analysis["is_retryable"] and 
+            retry_on_failure and 
+            current_attempt < max_retries and 
+            not circuit_breaker_open):
+            
+            # Calculate exponential backoff with jitter
+            base_delay = step_config.get("retry_base_delay", 1.0)
+            backoff_factor = step_config.get("backoff_factor", 2.0)
+            jitter = step_config.get("jitter_enabled", True)
+            
+            delay = base_delay * (backoff_factor ** (current_attempt - 1))
+            if jitter:
+                delay *= (0.8 + 0.4 * time.time() % 1)  # Add 20% jitter
+            delay = min(delay, step_config.get("max_retry_delay", 60.0))
+            
             return {
-                "recovery_strategy": "skip_with_warning",
-                "message": f"Skipping failed step {step_name}",
+                "strategy": "retry_with_exponential_backoff",
+                "message": f"Retrying {step_name} (attempt {current_attempt + 1}/{max_retries}) in {delay:.1f}s",
+                "delay_seconds": delay,
+                "retry_attempt": current_attempt + 1,
                 "error": str(error),
+                "error_type": type(error).__name__,
+                "reason": error_analysis["retry_reason"]
             }
-        else:
+        
+        # Strategy 2: Fallback to alternative approach
+        if (error_analysis["fallback_available"] and 
+            fallback_enabled and 
+            current_attempt < max_retries):
+            
+            fallback_approach = await self._get_fallback_approach(step, error, workflow)
+            
             return {
-                "recovery_strategy": "fail_workflow",
-                "message": f"Critical failure in {step_name}, stopping workflow",
-                "error": str(error),
+                "strategy": "fallback_approach",
+                "message": f"Using fallback approach for {step_name}: {fallback_approach['description']}",
+                "fallback_config": fallback_approach,
+                "original_error": str(error),
+                "error_type": type(error).__name__,
+                "reason": "Primary approach failed, switching to fallback"
             }
+        
+        # Strategy 3: Skip step with warning (if configured to continue on failure)
+        if continue_on_failure and step_type not in ["critical", "load"]:
+            return {
+                "strategy": "skip_with_warning",
+                "message": f"Skipping non-critical step {step_name} due to failure",
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "reason": "Step configured to continue on failure",
+                "impact_assessment": await self._assess_skip_impact(step, workflow)
+            }
+        
+        # Strategy 4: Circuit breaker - temporarily disable step
+        if (circuit_breaker_enabled and 
+            error_analysis["triggers_circuit_breaker"] and 
+            await self._should_open_circuit_breaker(step_name, step_type)):
+            
+            await self._open_circuit_breaker(step_name, step_type)
+            
+            return {
+                "strategy": "circuit_breaker_open",
+                "message": f"Circuit breaker opened for {step_name} due to repeated failures",
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "reason": "Too many failures, temporarily disabling step",
+                "recovery_time_estimate": step_config.get("circuit_breaker_recovery_time", 300)
+            }
+        
+        # Strategy 5: Graceful degradation - reduce functionality
+        if error_analysis["supports_degradation"]:
+            degradation_config = await self._get_degradation_config(step, error, workflow)
+            
+            return {
+                "strategy": "graceful_degradation",
+                "message": f"Degrading functionality for {step_name}",
+                "degradation_config": degradation_config,
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "reason": "Reducing functionality to maintain partial operation"
+            }
+        
+        # Strategy 6: Dead letter queue - store for later processing
+        if error_analysis["can_defer"]:
+            await self._add_to_dead_letter_queue(step, error, workflow)
+            
+            return {
+                "strategy": "dead_letter_queue",
+                "message": f"Added {step_name} to dead letter queue for later processing",
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "reason": "Step can be processed later when conditions improve",
+                "queue_id": f"dlq_{workflow['workflow_id']}_{step_name}_{int(time.time())}"
+            }
+        
+        # Strategy 7: Rollback workflow to previous checkpoint
+        if workflow.get("supports_rollback", False) and workflow.get("checkpoints"):
+            rollback_point = await self._find_rollback_point(workflow)
+            
+            return {
+                "strategy": "rollback_to_checkpoint",
+                "message": f"Rolling back workflow to checkpoint: {rollback_point['name']}",
+                "rollback_point": rollback_point,
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "reason": "Critical failure requires rollback to stable state"
+            }
+        
+        # Strategy 8: Fail workflow (last resort)
+        return {
+            "strategy": "fail_workflow",
+            "message": f"Critical failure in {step_name}, stopping workflow",
+            "error": str(error),
+            "error_type": type(error).__name__,
+            "reason": "No viable recovery strategy available",
+            "failure_analysis": error_analysis,
+            "attempted_strategies": await self._get_attempted_strategies(workflow)
+        }
+    
+    def _analyze_error(self, error: Exception, step: Dict[str, Any], workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze error to determine recovery characteristics."""
+        error_type = type(error).__name__
+        error_message = str(error).lower()
+        step_type = step.get("type", "unknown")
+        
+        # Network and connectivity errors - highly retryable
+        if isinstance(error, (NetworkException, ConnectionError)) or "network" in error_message:
+            return {
+                "is_retryable": True,
+                "retry_reason": "Network connectivity issue",
+                "fallback_available": True,
+                "triggers_circuit_breaker": True,
+                "supports_degradation": False,
+                "can_defer": True
+            }
+        
+        # Rate limiting - retryable with backoff
+        if isinstance(error, RateLimitException) or "rate limit" in error_message or "throttl" in error_message:
+            return {
+                "is_retryable": True,
+                "retry_reason": "Rate limiting, will backoff",
+                "fallback_available": True,
+                "triggers_circuit_breaker": False,
+                "supports_degradation": True,
+                "can_defer": True
+            }
+        
+        # External service errors - moderately retryable
+        if isinstance(error, ExternalServiceException) or "service unavailable" in error_message:
+            return {
+                "is_retryable": True,
+                "retry_reason": "External service issue",
+                "fallback_available": True,
+                "triggers_circuit_breaker": True,
+                "supports_degradation": True,
+                "can_defer": True
+            }
+        
+        # Timeout errors - retryable
+        if "timeout" in error_message or isinstance(error, asyncio.TimeoutError):
+            return {
+                "is_retryable": True,
+                "retry_reason": "Request timeout",
+                "fallback_available": True,
+                "triggers_circuit_breaker": True,
+                "supports_degradation": False,
+                "can_defer": True
+            }
+        
+        # Authentication/authorization errors - not retryable
+        if "auth" in error_message or "unauthorized" in error_message or "forbidden" in error_message:
+            return {
+                "is_retryable": False,
+                "retry_reason": "Authentication/authorization failure",
+                "fallback_available": False,
+                "triggers_circuit_breaker": False,
+                "supports_degradation": False,
+                "can_defer": False
+            }
+        
+        # Validation/configuration errors - not retryable
+        if "validation" in error_message or "configuration" in error_message or isinstance(error, ValueError):
+            return {
+                "is_retryable": False,
+                "retry_reason": "Configuration or validation error",
+                "fallback_available": False,
+                "triggers_circuit_breaker": False,
+                "supports_degradation": False,
+                "can_defer": False
+            }
+        
+        # Data processing errors - may be retryable depending on context
+        if step_type in ["transform", "validate"]:
+            return {
+                "is_retryable": True,
+                "retry_reason": "Data processing error, may be transient",
+                "fallback_available": True,
+                "triggers_circuit_breaker": False,
+                "supports_degradation": True,
+                "can_defer": True
+            }
+        
+        # Default analysis for unknown errors
+        return {
+            "is_retryable": True,
+            "retry_reason": "Unknown error, attempting retry",
+            "fallback_available": False,
+            "triggers_circuit_breaker": False,
+            "supports_degradation": False,
+            "can_defer": False
+        }
+    
+    async def _check_circuit_breaker_status(self, step_name: str, step_type: str) -> bool:
+        """Check if circuit breaker is open for this step."""
+        # This would integrate with actual circuit breaker implementation
+        # For now, return False (circuit closed)
+        return False
+    
+    async def _should_open_circuit_breaker(self, step_name: str, step_type: str) -> bool:
+        """Determine if circuit breaker should be opened."""
+        # This would check failure rate and thresholds
+        # For now, return False
+        return False
+    
+    async def _open_circuit_breaker(self, step_name: str, step_type: str) -> None:
+        """Open circuit breaker for the specified step."""
+        # This would implement actual circuit breaker opening
+        self.logger.warning(f"Circuit breaker opened for {step_name} ({step_type})")
+    
+    async def _get_fallback_approach(self, step: Dict[str, Any], error: Exception, workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Get fallback approach configuration for failed step."""
+        step_type = step.get("type", "unknown")
+        
+        fallback_configs = {
+            "extract": {
+                "description": "Use cached data or alternative data source",
+                "approach": "alternative_source",
+                "reduced_functionality": True
+            },
+            "transform": {
+                "description": "Apply simplified transformation rules",
+                "approach": "simplified_transform",
+                "reduced_functionality": True
+            },
+            "load": {
+                "description": "Load to alternative destination or queue",
+                "approach": "alternative_destination",
+                "reduced_functionality": False
+            },
+            "validate": {
+                "description": "Apply relaxed validation rules",
+                "approach": "relaxed_validation",
+                "reduced_functionality": True
+            }
+        }
+        
+        return fallback_configs.get(step_type, {
+            "description": "Generic fallback approach",
+            "approach": "generic_fallback",
+            "reduced_functionality": True
+        })
+    
+    async def _assess_skip_impact(self, step: Dict[str, Any], workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Assess the impact of skipping a step."""
+        step_type = step.get("type", "unknown")
+        step_name = step.get("name", "unknown")
+        
+        impact_levels = {
+            "extract": "high",      # Skipping data extraction is serious
+            "transform": "medium",  # May affect data quality
+            "validate": "low",      # Validation can often be skipped temporarily
+            "load": "high",         # Skipping load defeats the purpose
+            "monitor": "low"        # Monitoring is important but not critical
+        }
+        
+        return {
+            "impact_level": impact_levels.get(step_type, "medium"),
+            "downstream_effects": f"Skipping {step_name} may affect subsequent steps",
+            "data_quality_impact": step_type in ["transform", "validate"],
+            "business_continuity_impact": step_type in ["extract", "load"]
+        }
+    
+    async def _get_degradation_config(self, step: Dict[str, Any], error: Exception, workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Get graceful degradation configuration."""
+        step_type = step.get("type", "unknown")
+        
+        degradation_configs = {
+            "extract": {
+                "reduced_data_volume": True,
+                "sample_percentage": 10,
+                "skip_optional_fields": True
+            },
+            "transform": {
+                "simplified_rules": True,
+                "skip_non_essential_transforms": True,
+                "relaxed_data_types": True
+            },
+            "validate": {
+                "essential_checks_only": True,
+                "warning_instead_of_error": True,
+                "skip_referential_integrity": True
+            }
+        }
+        
+        return degradation_configs.get(step_type, {
+            "reduced_functionality": True,
+            "best_effort_mode": True
+        })
+    
+    async def _add_to_dead_letter_queue(self, step: Dict[str, Any], error: Exception, workflow: Dict[str, Any]) -> None:
+        """Add failed step to dead letter queue for later processing."""
+        # This would implement actual dead letter queue functionality
+        self.logger.info(f"Added step {step.get('name')} to dead letter queue")
+    
+    async def _find_rollback_point(self, workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Find the best rollback point in the workflow."""
+        checkpoints = workflow.get("checkpoints", [])
+        
+        if checkpoints:
+            # Return the most recent checkpoint
+            return max(checkpoints, key=lambda c: c.get("timestamp", 0))
+        
+        # Default rollback point
+        return {
+            "name": "workflow_start",
+            "timestamp": workflow.get("started_at", time.time()),
+            "state": "initial"
+        }
+    
+    async def _get_attempted_strategies(self, workflow: Dict[str, Any]) -> List[str]:
+        """Get list of recovery strategies attempted for this workflow."""
+        failure_history = workflow.get("failure_history", [])
+        strategies = set()
+        
+        for failure in failure_history:
+            if "recovery_strategy" in failure:
+                strategies.add(failure["recovery_strategy"])
+        
+        return list(strategies)
     
     async def _use_tool(self, tool_name: str, tool_inputs: Dict[str, Any]) -> Any:
         """Use a tool from the registry."""
