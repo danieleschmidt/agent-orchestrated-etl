@@ -138,7 +138,7 @@ Respond in JSON format when structured data is requested, otherwise provide clea
             # Extract workflow requirements
             requirements = task.inputs.get("requirements", {})
             data_source = requirements.get("data_source")
-            # TODO: Use target for workflow routing
+            target = requirements.get("target")
             workflow_id = task.inputs.get("workflow_id", f"workflow_{int(time.time())}")
             
             if not data_source:
@@ -151,11 +151,15 @@ Respond in JSON format when structured data is requested, otherwise provide clea
                 "include_samples": True,
             })
             
-            # Step 2: Generate execution plan
+            # Step 2: Apply workflow routing based on target
+            routing_decision = await self._apply_workflow_routing(target, analysis_result, requirements, task.inputs.get("constraints", {}))
+            
+            # Step 3: Generate execution plan with routing configuration
             planning_context = {
                 "data_analysis": analysis_result,
                 "requirements": requirements,
                 "constraints": task.inputs.get("constraints", {}),
+                "routing_config": routing_decision["routing_config"],
             }
             
             execution_plan = await self._generate_execution_plan(planning_context)
@@ -186,9 +190,18 @@ Respond in JSON format when structured data is requested, otherwise provide clea
             return {
                 "workflow_id": workflow_id,
                 "status": "created",
+                "workflow_type": routing_decision["workflow_type"],
+                "optimization_strategy": routing_decision["optimization_strategy"],
                 "execution_plan": execution_plan,
                 "estimated_duration": execution_plan.get("estimated_duration", "unknown"),
                 "resource_requirements": execution_plan.get("resource_requirements", {}),
+                "resource_allocation": routing_decision["resource_allocation"],
+                "execution_priority": routing_decision["execution_priority"],
+                "routing_decision": routing_decision["audit_trail"],
+                "additional_steps": routing_decision.get("additional_steps", []),
+                "storage_configuration": routing_decision.get("storage_configuration", {}),
+                "execution_configuration": routing_decision.get("execution_configuration", {}),
+                "constraints": task.inputs.get("constraints", {}),
             }
             
         except Exception as e:
@@ -1042,6 +1055,210 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
             self.logger.error(f"Tool {tool_name} execution failed: {e}")
             raise AgentException(f"Tool execution failed: {e}") from e
     
+    async def _apply_workflow_routing(self, target: Optional[str], analysis_result: Dict[str, Any], requirements: Dict[str, Any], constraints: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply workflow routing based on target specification and data characteristics."""
+        routing_timestamp = time.time()
+        
+        # Determine workflow type based on target and data analysis
+        workflow_type, routing_strategy = self._determine_workflow_type(target, analysis_result, requirements)
+        
+        # Get routing configuration for the determined workflow type
+        routing_config = self._get_routing_configuration(workflow_type, analysis_result, requirements, constraints)
+        
+        # Create audit trail for routing decision
+        audit_trail = {
+            "target_specified": target,
+            "routing_strategy": routing_strategy,
+            "timestamp": routing_timestamp,
+            "decision_factors": self._get_routing_decision_factors(target, analysis_result, requirements),
+            "fallback_reason": routing_config.get("fallback_reason"),
+            "original_target": routing_config.get("original_target"),
+            "reason": routing_config.get("routing_reason", "Target-based routing")
+        }
+        
+        # Store routing decision in memory for learning
+        await self.memory.store_entry(
+            content=f"Workflow routing: {workflow_type} selected for target '{target}' with strategy '{routing_strategy}'",
+            entry_type=MemoryType.OBSERVATION,
+            importance=MemoryImportance.MEDIUM,
+            metadata={
+                "workflow_type": workflow_type,
+                "target": target,
+                "routing_strategy": routing_strategy,
+                "data_volume": analysis_result.get("volume", "unknown"),
+                "decision_timestamp": routing_timestamp
+            }
+        )
+        
+        return {
+            "workflow_type": workflow_type,
+            "optimization_strategy": routing_config["optimization_strategy"],
+            "resource_allocation": routing_config["resource_allocation"],
+            "execution_priority": routing_config["execution_priority"],
+            "routing_config": routing_config,
+            "audit_trail": audit_trail,
+            "additional_steps": routing_config.get("additional_steps", []),
+            "storage_configuration": routing_config.get("storage_configuration", {}),
+            "execution_configuration": routing_config.get("execution_configuration", {})
+        }
+    
+    def _determine_workflow_type(self, target: Optional[str], analysis_result: Dict[str, Any], requirements: Dict[str, Any]) -> tuple[str, str]:
+        """Determine workflow type based on target and data characteristics."""
+        # Handle auto-routing based on data characteristics
+        if target == "auto":
+            return self._auto_route_workflow(analysis_result, requirements)
+        
+        # Handle explicit target routing
+        valid_targets = {
+            "batch_processing": ("batch_processing", "target_based"),
+            "streaming": ("streaming", "target_based"),
+            "data_warehouse": ("data_warehouse", "target_based"),
+            "machine_learning": ("machine_learning", "target_based"),
+            "data_lake": ("data_lake", "target_based"),
+            "analytics": ("data_warehouse", "target_based"),  # Alias
+            "ml": ("machine_learning", "target_based"),        # Alias
+            "realtime": ("streaming", "target_based"),         # Alias
+        }
+        
+        if target and target in valid_targets:
+            return valid_targets[target]
+        
+        # Fallback to auto-routing for invalid targets
+        if target:
+            self.logger.warning(f"Invalid target '{target}' specified, falling back to auto-routing")
+            return self._auto_route_workflow(analysis_result, requirements, fallback_target=target)
+        
+        # Default to general purpose if no target specified
+        return ("general_purpose", "default")
+    
+    def _auto_route_workflow(self, analysis_result: Dict[str, Any], requirements: Dict[str, Any], fallback_target: Optional[str] = None) -> tuple[str, str]:
+        """Automatically route workflow based on data characteristics."""
+        volume = analysis_result.get("volume", "unknown")
+        data_source = requirements.get("data_source", "")
+        
+        # Route based on data volume
+        if volume in ["very_large", "large"]:
+            estimated_size = analysis_result.get("estimated_size", "")
+            if "TB" in estimated_size or "PB" in estimated_size:
+                return ("batch_processing", "volume_threshold_exceeded")
+        
+        # Route based on data source type
+        if "kafka://" in data_source or "stream" in data_source.lower():
+            return ("streaming", "streaming_source_detected")
+        
+        if "warehouse" in data_source.lower() or "redshift://" in data_source or "snowflake://" in data_source:
+            return ("data_warehouse", "warehouse_source_detected")
+        
+        # Default fallback
+        if fallback_target:
+            return ("general_purpose", f"fallback_from_{fallback_target}")
+        
+        return ("general_purpose", "auto_routing_default")
+    
+    def _get_routing_configuration(self, workflow_type: str, analysis_result: Dict[str, Any], requirements: Dict[str, Any], constraints: Dict[str, Any]) -> Dict[str, Any]:
+        """Get routing configuration for the specified workflow type."""
+        base_configs = {
+            "batch_processing": {
+                "optimization_strategy": "throughput_optimized",
+                "resource_allocation": {
+                    "parallelism": "high",
+                    "memory_mode": "batch",
+                    "compute_mode": "distributed"
+                },
+                "execution_priority": requirements.get("priority", "standard"),
+                "routing_reason": "Optimized for high-throughput batch processing"
+            },
+            "streaming": {
+                "optimization_strategy": "latency_optimized",
+                "resource_allocation": {
+                    "memory_mode": "streaming",
+                    "compute_mode": "continuous",
+                    "parallelism": "medium"
+                },
+                "execution_priority": requirements.get("priority", "high"),
+                "routing_reason": "Optimized for low-latency streaming processing"
+            },
+            "data_warehouse": {
+                "optimization_strategy": "analytics_optimized",
+                "resource_allocation": {
+                    "compute_mode": "analytical",
+                    "memory_mode": "columnar",
+                    "parallelism": "medium"
+                },
+                "execution_priority": requirements.get("priority", "normal"),
+                "additional_steps": ["data_quality_checks"],
+                "routing_reason": "Optimized for analytical workloads"
+            },
+            "machine_learning": {
+                "optimization_strategy": "ml_optimized",
+                "resource_allocation": {
+                    "gpu_enabled": True,
+                    "compute_mode": "ml",
+                    "memory_mode": "feature_store"
+                },
+                "execution_priority": requirements.get("priority", "normal"),
+                "routing_reason": "Optimized for machine learning pipelines"
+            },
+            "data_lake": {
+                "optimization_strategy": "storage_optimized",
+                "resource_allocation": {
+                    "partitioning": "enabled",
+                    "compute_mode": "distributed",
+                    "storage_mode": "parquet"
+                },
+                "execution_priority": requirements.get("priority", "normal"),
+                "storage_configuration": {
+                    "tier": requirements.get("storage_tier", "hot"),
+                    "compression": "enabled"
+                },
+                "routing_reason": "Optimized for data lake storage and retrieval"
+            },
+            "general_purpose": {
+                "optimization_strategy": "balanced",
+                "resource_allocation": {
+                    "parallelism": "medium",
+                    "compute_mode": "standard",
+                    "memory_mode": "standard"
+                },
+                "execution_priority": requirements.get("priority", "normal"),
+                "routing_reason": "Balanced configuration for general ETL workloads"
+            }
+        }
+        
+        # Get base configuration
+        config = base_configs.get(workflow_type, base_configs["general_purpose"]).copy()
+        
+        # Apply custom parameters if provided
+        custom_params = requirements.get("custom_params", {})
+        if custom_params:
+            execution_config = {
+                "max_parallel_tasks": custom_params.get("max_parallel_tasks"),
+                "timeout_minutes": custom_params.get("timeout_minutes"),
+                "retry_strategy": custom_params.get("retry_strategy")
+            }
+            # Remove None values
+            config["execution_configuration"] = {k: v for k, v in execution_config.items() if v is not None}
+        
+        # Add fallback information for invalid targets
+        if workflow_type == "general_purpose" and "fallback_from_" in config.get("routing_reason", ""):
+            original_target = config["routing_reason"].replace("fallback_from_", "")
+            config["fallback_reason"] = "invalid_target_specified"
+            config["original_target"] = original_target
+        
+        return config
+    
+    def _get_routing_decision_factors(self, target: Optional[str], analysis_result: Dict[str, Any], requirements: Dict[str, Any]) -> Dict[str, Any]:
+        """Get factors that influenced the routing decision."""
+        return {
+            "target_specified": target is not None,
+            "data_volume": analysis_result.get("volume", "unknown"),
+            "estimated_size": analysis_result.get("estimated_size"),
+            "data_source_type": requirements.get("data_source", "").split("://")[0] if "://" in requirements.get("data_source", "") else "file",
+            "priority_specified": "priority" in requirements,
+            "custom_params_provided": "custom_params" in requirements,
+            "constraints_provided": len(requirements.get("constraints", {})) > 0
+        }
+
     async def _store_workflow_memory(self, workflow: Dict[str, Any], memory_type: MemoryType) -> None:
         """Store workflow information in memory."""
         self.memory.store_memory(
