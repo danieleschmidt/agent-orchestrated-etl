@@ -13,6 +13,20 @@ from pydantic import BaseModel, Field
 from ..exceptions import AgentException
 from ..logging_config import get_logger
 
+# Vector search dependencies (optional)
+try:
+    import chromadb
+    from chromadb.config import Settings
+    CHROMADB_AVAILABLE = True
+except ImportError:
+    CHROMADB_AVAILABLE = False
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+
 
 class MemoryType(Enum):
     """Types of memory entries."""
@@ -163,8 +177,23 @@ class AgentMemory:
             "last_cleanup": time.time(),
         }
         
+        # Vector search components (optional)
+        self._vector_search_enabled = False
+        self._embedding_model = None
+        self._vector_store = None
+        self._similarity_threshold = 0.7  # Configurable similarity threshold
+        
+        # Initialize logger first
         self.logger = get_logger(f"agent.memory.{agent_id}")
+        
+        # Initialize vector search if dependencies are available
+        self._init_vector_search()
+        
         self.logger.info(f"Memory system initialized for agent {agent_id}")
+        if self._vector_search_enabled:
+            self.logger.info("Vector-based semantic search enabled")
+        else:
+            self.logger.info("Using traditional substring search (vector dependencies not available)")
     
     def store_memory(
         self,
@@ -218,6 +247,9 @@ class AgentMemory:
             # Update indexes
             self._update_indexes_on_add(memory_entry)
             
+            # Store in vector database if enabled
+            self._store_memory_vector(memory_entry)
+            
             # Update working memory
             self._update_working_memory(entry_id)
             
@@ -238,6 +270,203 @@ class AgentMemory:
         except Exception as e:
             self.logger.error(f"Failed to store memory: {e}", exc_info=e)
             raise AgentException(f"Memory storage failed: {e}") from e
+    
+    def _init_vector_search(self) -> None:
+        """Initialize vector search components if dependencies are available."""
+        if not CHROMADB_AVAILABLE or not SENTENCE_TRANSFORMERS_AVAILABLE:
+            self.logger.info("Vector search dependencies not available, using substring search")
+            return
+        
+        try:
+            # Initialize embedding model
+            self._init_embedding_model()
+            
+            # Initialize vector store
+            self._init_vector_store()
+            
+            self._vector_search_enabled = True
+            self.logger.info("Vector search initialized successfully")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize vector search: {e}, falling back to substring search")
+            self._vector_search_enabled = False
+    
+    def _init_embedding_model(self) -> None:
+        """Initialize the sentence transformer model for embeddings."""
+        try:
+            # Use a lightweight, fast model suitable for semantic search
+            model_name = "all-MiniLM-L6-v2"  # 384-dimensional embeddings, fast and effective
+            self._embedding_model = SentenceTransformer(model_name)
+            self.logger.debug(f"Embedding model '{model_name}' loaded successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to load embedding model: {e}")
+            raise
+    
+    def _init_vector_store(self) -> None:
+        """Initialize ChromaDB vector store."""
+        try:
+            # Create or connect to ChromaDB client
+            # Use persistent client for production, in-memory for testing
+            client = chromadb.Client(Settings(
+                is_persistent=True,
+                persist_directory=f"./chroma_db/agent_{self.agent_id}",
+                anonymized_telemetry=False
+            ))
+            
+            # Get or create collection for this agent's memories
+            collection_name = f"memories_{self.agent_id}"
+            self._vector_store = client.get_or_create_collection(
+                name=collection_name,
+                metadata={"description": f"Semantic memory for agent {self.agent_id}"}
+            )
+            
+            self.logger.debug(f"Vector store collection '{collection_name}' initialized")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize vector store: {e}")
+            raise
+    
+    def _generate_embedding(self, content: Dict[str, Any]) -> List[float]:
+        """Generate embedding vector for memory content."""
+        if not self._embedding_model:
+            raise AgentException("Embedding model not initialized")
+        
+        # Extract text content for embedding
+        text_content = self._extract_text_for_embedding_from_dict(content)
+        
+        # Generate embedding
+        embedding = self._embedding_model.encode(text_content)
+        # Handle both numpy arrays and lists
+        if hasattr(embedding, 'tolist'):
+            return embedding.tolist()
+        else:
+            return list(embedding)
+    
+    def _extract_text_for_embedding(self, memory: MemoryEntry) -> str:
+        """Extract relevant text content from memory entry for embedding generation."""
+        text_parts = []
+        
+        # Extract content text
+        content_text = self._extract_text_for_embedding_from_dict(memory.content)
+        if content_text:
+            text_parts.append(content_text)
+        
+        # Include tags as context
+        if memory.tags:
+            tags_text = " ".join(memory.tags)
+            text_parts.append(f"tags: {tags_text}")
+        
+        # Include memory type as context
+        text_parts.append(f"type: {memory.memory_type.value}")
+        
+        return " ".join(text_parts)
+    
+    def _extract_text_for_embedding_from_dict(self, content: Dict[str, Any]) -> str:
+        """Extract text content from a dictionary for embedding."""
+        text_parts = []
+        
+        def extract_text_recursive(obj, max_depth=3, current_depth=0):
+            if current_depth >= max_depth:
+                return
+            
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if isinstance(value, str) and value.strip():
+                        text_parts.append(value.strip())
+                    elif isinstance(value, (dict, list)):
+                        extract_text_recursive(value, max_depth, current_depth + 1)
+            elif isinstance(obj, list):
+                for item in obj:
+                    if isinstance(item, str) and item.strip():
+                        text_parts.append(item.strip())
+                    elif isinstance(item, (dict, list)):
+                        extract_text_recursive(item, max_depth, current_depth + 1)
+            elif isinstance(obj, str) and obj.strip():
+                text_parts.append(obj.strip())
+        
+        extract_text_recursive(content)
+        return " ".join(text_parts)
+    
+    def _store_memory_vector(self, memory: MemoryEntry) -> None:
+        """Store memory in vector database."""
+        if not self._vector_search_enabled or not self._vector_store:
+            return
+        
+        try:
+            # Generate embedding
+            embedding = self._generate_embedding(memory.content)
+            
+            # Extract text for metadata
+            text_content = self._extract_text_for_embedding(memory)
+            
+            # Store in vector database
+            self._vector_store.add(
+                ids=[memory.entry_id],
+                embeddings=[embedding],
+                metadatas=[{
+                    "entry_id": memory.entry_id,
+                    "memory_type": memory.memory_type.value,
+                    "importance": memory.importance.value,
+                    "created_at": memory.created_at,
+                    "tags": list(memory.tags),
+                    "text_content": text_content[:1000]  # Limit metadata size
+                }],
+                documents=[text_content]
+            )
+            
+            self.logger.debug(f"Memory vector stored for entry {memory.entry_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to store memory vector: {e}")
+            # Don't raise exception - vector storage is optional
+    
+    def _vector_similarity_search(
+        self, 
+        query: MemoryQuery, 
+        similarity_threshold: Optional[float] = None
+    ) -> List[MemoryEntry]:
+        """Perform vector similarity search for memories."""
+        if not self._vector_search_enabled or not self._vector_store or not query.query_text:
+            return []
+        
+        try:
+            # Generate query embedding
+            query_embedding = self._embedding_model.encode(query.query_text)
+            
+            # Handle both numpy arrays and lists
+            if hasattr(query_embedding, 'tolist'):
+                embedding_list = query_embedding.tolist()
+            else:
+                embedding_list = list(query_embedding)
+            
+            # Perform similarity search
+            results = self._vector_store.query(
+                query_embeddings=[embedding_list],
+                n_results=min(query.limit * 2, 100),  # Get more results for filtering
+                include=["metadatas", "distances"]
+            )
+            
+            # Process results and apply similarity threshold
+            threshold = similarity_threshold or self._similarity_threshold
+            matched_memories = []
+            
+            if results['ids'] and results['ids'][0]:
+                for i, (entry_id, distance) in enumerate(zip(results['ids'][0], results['distances'][0])):
+                    # Lower distance = higher similarity; convert to similarity score
+                    similarity = 1.0 - distance
+                    
+                    if similarity >= threshold:
+                        # Retrieve actual memory entry
+                        memory = self.memories.get(entry_id)
+                        if memory and not memory.is_expired():
+                            matched_memories.append(memory)
+            
+            # Sort by similarity (already ordered by ChromaDB, but ensure consistency)
+            return matched_memories[:query.limit]
+            
+        except Exception as e:
+            self.logger.error(f"Vector similarity search failed: {e}")
+            return []
     
     def retrieve_memory(self, entry_id: str) -> Optional[MemoryEntry]:
         """Retrieve a specific memory entry by ID.
@@ -270,10 +499,23 @@ class AgentMemory:
             List of matching memory entries
         """
         try:
-            # Start with all memories
-            candidate_ids = set(self.memories.keys())
+            # Use vector search for text queries when available, otherwise use traditional approach
+            if self._vector_search_enabled and query.query_text:
+                # Get vector similarity results first
+                vector_results = self._vector_similarity_search(query)
+                vector_result_ids = {memory.entry_id for memory in vector_results}
+                
+                # Start with vector search results, then apply additional filters
+                candidate_ids = vector_result_ids
+                
+                # If no vector results but traditional filters exist, fall back to all memories
+                if not candidate_ids and (query.memory_types or query.tags or query.min_importance):
+                    candidate_ids = set(self.memories.keys())
+            else:
+                # Traditional approach: start with all memories
+                candidate_ids = set(self.memories.keys())
             
-            # Apply filters
+            # Apply traditional filters
             if query.memory_types:
                 type_ids = set()
                 for memory_type in query.memory_types:
@@ -312,21 +554,28 @@ class AgentMemory:
                 if query.min_confidence and memory.confidence < query.min_confidence:
                     continue
                 
-                # Text search (simple substring matching - could be enhanced with vector search)
-                if query.query_text:
+                # Traditional text search (only if vector search wasn't used)
+                if query.query_text and not self._vector_search_enabled:
                     content_text = json.dumps(memory.content).lower()
                     if query.query_text.lower() not in content_text:
                         continue
                 
                 filtered_memories.append(memory)
             
-            # Sort by relevance (importance + recency + access frequency)
+            # Sort by relevance (importance + recency + access frequency + vector similarity)
             def relevance_score(mem: MemoryEntry) -> float:
                 recency = 1.0 / (1.0 + (current_time - mem.last_accessed) / 3600)  # Recency in hours
                 frequency = min(mem.access_count / 100.0, 1.0)  # Normalized frequency
                 importance = mem.importance.value / 10.0  # Normalized importance
                 
-                return importance * 0.5 + recency * 0.3 + frequency * 0.2
+                # If vector search was used, preserve the similarity-based ordering
+                if self._vector_search_enabled and query.query_text and mem.entry_id in vector_result_ids:
+                    # Vector results are already ordered by similarity, so use position as similarity score
+                    vector_position = next((i for i, vm in enumerate(vector_results) if vm.entry_id == mem.entry_id), len(vector_results))
+                    vector_similarity = 1.0 - (vector_position / max(len(vector_results), 1))  # Higher for earlier results
+                    return importance * 0.3 + recency * 0.2 + frequency * 0.1 + vector_similarity * 0.4
+                else:
+                    return importance * 0.5 + recency * 0.3 + frequency * 0.2
             
             filtered_memories.sort(key=relevance_score, reverse=True)
             
