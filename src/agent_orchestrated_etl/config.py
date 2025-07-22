@@ -596,7 +596,7 @@ class ConfigChangeHandler(FileSystemEventHandler):
     
     def __init__(self, config_manager: 'ConfigManager'):
         self.config_manager = config_manager
-        self.last_modified = {}
+        self.last_modified: Dict[str, float] = {}
     
     def on_modified(self, event):
         """Handle file modification events."""
@@ -720,7 +720,7 @@ class ConfigManager:
         config.api.timeout = int(os.getenv("AGENT_ETL_API_TIMEOUT", "30"))
         
         # Load logging config - support both prefixed and simple env vars for compatibility
-        config.logging.level = os.getenv("AGENT_ETL_LOG_LEVEL") or os.getenv("LOG_LEVEL", "INFO")
+        config.logging.level = os.getenv("AGENT_ETL_LOG_LEVEL") or os.getenv("LOG_LEVEL") or "INFO"
         config.logging.format = os.getenv("AGENT_ETL_LOG_FORMAT", "json")
         config.logging.output = os.getenv("AGENT_ETL_LOG_OUTPUT", "console")
         config.logging.file_path = os.getenv("AGENT_ETL_LOG_FILE")
