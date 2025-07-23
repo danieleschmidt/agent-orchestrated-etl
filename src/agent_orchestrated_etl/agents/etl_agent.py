@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import time
 import statistics
+import csv
+import os
+import psutil
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
 import re
@@ -1206,15 +1209,246 @@ Otherwise, explain what additional information or resources would be needed."""
         }
     
     async def _extract_from_file(self, source_config: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract data from file sources."""
-        # Placeholder implementation
-        return {
-            "extraction_method": "file",
-            "source_config": source_config,
-            "record_count": 800,
-            "extraction_time": 2.1,
-            "status": "completed",
-        }
+        """Extract data from file sources.
+        
+        Supports CSV, JSON, JSONL, and Parquet file formats with comprehensive
+        error handling, performance monitoring, and data profiling.
+        
+        Args:
+            source_config: Configuration containing file path, format, and options
+            
+        Returns:
+            Dict containing extraction results, metadata, and performance metrics
+        """
+        start_time = time.time()
+        start_memory = psutil.Process().memory_info().rss
+        
+        try:
+            # Extract configuration parameters
+            file_path = source_config.get('path')
+            file_format = source_config.get('format', '').lower()
+            encoding = source_config.get('encoding', 'utf-8')
+            sample_size = source_config.get('sample_size', 100)
+            infer_types = source_config.get('infer_types', False)
+            
+            if not file_path:
+                raise ValueError("File path is required")
+            
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"File not found: {file_path}")
+            
+            # Get file metadata
+            file_stat = os.stat(file_path)
+            file_size = file_stat.st_size
+            
+            # Initialize result structure
+            result = {
+                "extraction_method": "file",
+                "format": file_format,
+                "status": "completed",
+                "file_path": file_path,
+                "file_size": file_size,
+                "encoding": encoding,
+                "record_count": 0,
+                "columns": [],
+                "sample_data": [],
+                "schema": {},
+                "extraction_time": 0,
+                "memory_usage": 0
+            }
+            
+            # Handle empty files
+            if file_size == 0:
+                result["extraction_time"] = time.time() - start_time
+                result["memory_usage"] = psutil.Process().memory_info().rss - start_memory
+                return result
+            
+            # Extract data based on format
+            if file_format == 'csv':
+                await self._extract_csv_data(file_path, source_config, result)
+            elif file_format == 'json':
+                await self._extract_json_data(file_path, source_config, result)
+            elif file_format == 'jsonl':
+                await self._extract_jsonl_data(file_path, source_config, result)
+            elif file_format == 'parquet':
+                await self._extract_parquet_data(file_path, source_config, result)
+            else:
+                raise ValueError(f"Unsupported file format: {file_format}")
+            
+            # Limit sample data size
+            if len(result["sample_data"]) > sample_size:
+                result["sample_data"] = result["sample_data"][:sample_size]
+            
+            # Infer schema if requested
+            if infer_types and result["sample_data"]:
+                result["schema"] = self._infer_schema(result["sample_data"], result["columns"])
+            
+            # Calculate performance metrics
+            result["extraction_time"] = time.time() - start_time
+            result["memory_usage"] = psutil.Process().memory_info().rss - start_memory
+            
+            return result
+            
+        except FileNotFoundError as e:
+            return {
+                "extraction_method": "file",
+                "status": "error",
+                "error_message": f"File not found: {str(e)}",
+                "extraction_time": time.time() - start_time,
+                "memory_usage": psutil.Process().memory_info().rss - start_memory
+            }
+        except ValueError as e:
+            return {
+                "extraction_method": "file",
+                "status": "error",
+                "error_message": str(e),
+                "extraction_time": time.time() - start_time,
+                "memory_usage": psutil.Process().memory_info().rss - start_memory
+            }
+        except Exception as e:
+            return {
+                "extraction_method": "file",
+                "status": "error",
+                "error_message": f"Unexpected error during file extraction: {str(e)}",
+                "extraction_time": time.time() - start_time,
+                "memory_usage": psutil.Process().memory_info().rss - start_memory
+            }
+    
+    async def _extract_csv_data(self, file_path: str, source_config: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """Extract data from CSV file."""
+        encoding = source_config.get('encoding', 'utf-8')
+        delimiter = source_config.get('delimiter', ',')
+        
+        with open(file_path, 'r', encoding=encoding, newline='') as f:
+            # Detect delimiter if not specified
+            if delimiter == ',':
+                sample = f.read(1024)
+                f.seek(0)
+                sniffer = csv.Sniffer()
+                try:
+                    dialect = sniffer.sniff(sample, delimiters=',;\t|')
+                    delimiter = dialect.delimiter
+                except csv.Error:
+                    delimiter = ','
+            
+            reader = csv.reader(f, delimiter=delimiter)
+            rows = list(reader)
+            
+            if rows:
+                result["columns"] = rows[0] if rows else []
+                data_rows = rows[1:] if len(rows) > 1 else []
+                result["record_count"] = len(data_rows)
+                
+                # Convert rows to list of dicts for sample data
+                result["sample_data"] = [
+                    dict(zip(result["columns"], row)) 
+                    for row in data_rows[:100]
+                ]
+    
+    async def _extract_json_data(self, file_path: str, source_config: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """Extract data from JSON file."""
+        encoding = source_config.get('encoding', 'utf-8')
+        
+        with open(file_path, 'r', encoding=encoding) as f:
+            data = json.load(f)
+            
+            # Handle different JSON structures
+            if isinstance(data, list):
+                result["record_count"] = len(data)
+                result["sample_data"] = data[:100]
+                
+                # Extract column names from first record
+                if data and isinstance(data[0], dict):
+                    result["columns"] = list(data[0].keys())
+            elif isinstance(data, dict):
+                result["record_count"] = 1
+                result["sample_data"] = [data]
+                result["columns"] = list(data.keys())
+            else:
+                raise ValueError("JSON file must contain an object or array of objects")
+    
+    async def _extract_jsonl_data(self, file_path: str, source_config: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """Extract data from JSON Lines file."""
+        encoding = source_config.get('encoding', 'utf-8')
+        
+        records = []
+        columns_set = set()
+        
+        with open(file_path, 'r', encoding=encoding) as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                try:
+                    record = json.loads(line)
+                    records.append(record)
+                    
+                    if isinstance(record, dict):
+                        columns_set.update(record.keys())
+                    
+                    # Limit records for sample
+                    if len(records) >= 100:
+                        break
+                        
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid JSON on line {line_num}: {e}")
+        
+        result["record_count"] = len(records)
+        result["sample_data"] = records
+        result["columns"] = list(columns_set)
+    
+    async def _extract_parquet_data(self, file_path: str, source_config: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """Extract data from Parquet file."""
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ValueError("pandas is required for Parquet file support")
+        
+        try:
+            # Read parquet file
+            df = pd.read_parquet(file_path)
+            
+            result["record_count"] = len(df)
+            result["columns"] = df.columns.tolist()
+            
+            # Convert sample to list of dicts
+            sample_df = df.head(100)
+            result["sample_data"] = sample_df.to_dict('records')
+            
+        except Exception as e:
+            raise ValueError(f"Error reading Parquet file: {e}")
+    
+    def _infer_schema(self, sample_data: List[Dict[str, Any]], columns: List[str]) -> Dict[str, str]:
+        """Infer data types from sample data."""
+        schema = {}
+        
+        for column in columns:
+            column_values = []
+            for record in sample_data:
+                if column in record and record[column] is not None:
+                    column_values.append(record[column])
+            
+            if not column_values:
+                schema[column] = "unknown"
+                continue
+            
+            # Check if all values are numeric
+            try:
+                numeric_values = [float(v) for v in column_values if str(v).strip()]
+                if all(float(v).is_integer() for v in numeric_values):
+                    schema[column] = "integer"
+                else:
+                    schema[column] = "float"
+            except (ValueError, TypeError):
+                # Check if boolean
+                str_values = [str(v).lower() for v in column_values]
+                if all(v in ['true', 'false', '1', '0'] for v in str_values):
+                    schema[column] = "boolean"
+                else:
+                    schema[column] = "string"
+        
+        return schema
     
     async def _extract_from_api(self, source_config: Dict[str, Any]) -> Dict[str, Any]:
         """Extract data from API sources."""
