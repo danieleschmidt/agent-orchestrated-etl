@@ -1199,14 +1199,112 @@ Otherwise, explain what additional information or resources would be needed."""
     # Specialized extraction methods
     async def _extract_from_database(self, source_config: Dict[str, Any]) -> Dict[str, Any]:
         """Extract data from database sources."""
-        # Placeholder implementation
-        return {
-            "extraction_method": "database",
-            "source_config": source_config,
-            "record_count": 1000,
-            "extraction_time": 5.2,
-            "status": "completed",
-        }
+        import time
+        from sqlalchemy import create_engine, text
+        import pandas as pd
+        
+        start_time = time.time()
+        
+        try:
+            # Extract configuration
+            connection_string = source_config.get('connection_string')
+            query = source_config.get('query')
+            parameters = source_config.get('parameters', {})
+            batch_size = source_config.get('batch_size')
+            timeout = source_config.get('timeout', 30)
+            pool_size = source_config.get('pool_size', 5)
+            max_overflow = source_config.get('max_overflow', 10)
+            
+            if not connection_string or not query:
+                return {
+                    "extraction_method": "database",
+                    "status": "error",
+                    "error_message": "Missing connection_string or query in source_config",
+                    "extraction_time": time.time() - start_time
+                }
+            
+            # Create engine with connection pooling
+            engine_kwargs = {
+                'pool_size': pool_size,
+                'max_overflow': max_overflow,
+                'pool_timeout': timeout,
+                'pool_recycle': 3600  # Recycle connections after 1 hour
+            }
+            
+            # Handle SQLite special case (doesn't support connection pooling)
+            if connection_string.startswith('sqlite://'):
+                engine_kwargs = {'poolclass': None}
+            
+            engine = create_engine(connection_string, **engine_kwargs)
+            
+            # Execute the query with parameters
+            with engine.connect() as conn:
+                if parameters:
+                    result = conn.execute(text(query), parameters)
+                else:
+                    result = conn.execute(text(query))
+                
+                # Fetch data
+                columns = list(result.keys())
+                rows = result.fetchall()
+                
+                # Convert to list of dictionaries
+                data = [dict(zip(columns, row)) for row in rows]
+                record_count = len(data)
+                
+                # Handle batch processing information
+                batch_info = {}
+                if batch_size:
+                    total_batches = (record_count + batch_size - 1) // batch_size
+                    batch_info = {
+                        'batch_size': batch_size,
+                        'total_batches': total_batches,
+                        'batch_processing_enabled': True
+                    }
+                
+                extraction_time = time.time() - start_time
+                
+                result_dict = {
+                    "extraction_method": "database",
+                    "source_config": source_config,
+                    "status": "completed",
+                    "data": data,
+                    "record_count": record_count,
+                    "extraction_time": extraction_time,
+                    "connection_info": {
+                        "pool_configured": pool_size > 0,
+                        "connection_successful": True
+                    }
+                }
+                
+                if batch_info:
+                    result_dict["batch_info"] = batch_info
+                
+                return result_dict
+                
+        except Exception as e:
+            extraction_time = time.time() - start_time
+            error_message = str(e)
+            
+            # Determine if it's a connection error
+            if any(keyword in error_message.lower() for keyword in ['connection', 'connect', 'host', 'port', 'database lock', 'unable to open database']):
+                error_type = "connection"
+            elif 'timeout' in error_message.lower():
+                return {
+                    "extraction_method": "database",
+                    "status": "timeout",
+                    "error_message": f"Query timeout after {timeout} seconds: {error_message}",
+                    "extraction_time": extraction_time
+                }
+            else:
+                error_type = "execution"
+            
+            return {
+                "extraction_method": "database",
+                "status": "error",
+                "error_message": f"{error_type.title()} error: {error_message}",
+                "extraction_time": extraction_time
+            }
     
     async def _extract_from_file(self, source_config: Dict[str, Any]) -> Dict[str, Any]:
         """Extract data from file sources.
