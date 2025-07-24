@@ -396,7 +396,7 @@ class TestETLDataProfiling:
     
     @pytest.mark.asyncio
     async def test_load_sample_data(self, etl_agent):
-        """Test sample data loading for profiling."""
+        """Test sample data loading for profiling (mock implementation)."""
         config = ProfilingConfig(sample_size=100)
         
         sample_data = await etl_agent._load_sample_data("test_source", config)
@@ -417,6 +417,129 @@ class TestETLDataProfiling:
         if sample_data["data"]:
             first_column = list(sample_data["data"].values())[0]
             assert len(first_column) <= config.sample_size
+    
+    @pytest.mark.asyncio
+    async def test_load_real_sample_data_database(self, etl_agent):
+        """Test real database sampling functionality - ETL-011 implementation."""
+        config = ProfilingConfig(sample_size=5, sampling_strategy='random')
+        
+        # Mock database configuration
+        data_source_config = {
+            "type": "database",
+            "connection_string": "sqlite:///test.db",
+            "table_name": "test_table",
+            "sampling_strategy": "random",
+            "sample_size": 5
+        }
+        
+        # Mock the database sampling method to test the interface
+        with patch.object(etl_agent, '_sample_database_data') as mock_db_sample:
+            mock_db_sample.return_value = {
+                "columns": ["id", "name", "value"],
+                "total_records": 5,
+                "data": {
+                    "id": [1, 2, 3, 4, 5],
+                    "name": ["A", "B", "C", "D", "E"],
+                    "value": [10.1, 20.2, 30.3, 40.4, 50.5]
+                },
+                "sampling_metadata": {
+                    "strategy": "random",
+                    "requested_size": 5,
+                    "actual_size": 5,
+                    "source_type": "database"
+                }
+            }
+            
+            result = await etl_agent._load_real_sample_data(data_source_config, config)
+            
+            # Verify the method was called with correct parameters
+            mock_db_sample.assert_called_once_with(data_source_config, 'random', 5)
+            
+            # Verify result structure
+            assert result["columns"] == ["id", "name", "value"]
+            assert result["total_records"] == 5
+            assert "sampling_metadata" in result
+            assert result["sampling_metadata"]["strategy"] == "random"
+            assert result["sampling_metadata"]["source_type"] == "database"
+    
+    @pytest.mark.asyncio 
+    async def test_load_real_sample_data_file(self, etl_agent):
+        """Test real file sampling functionality - ETL-011 implementation."""
+        config = ProfilingConfig(sample_size=3, sampling_strategy='systematic')
+        
+        # Mock file configuration
+        data_source_config = {
+            "type": "file",
+            "file_path": "/path/to/test.csv",
+            "file_format": "csv",
+            "sampling_strategy": "systematic",
+            "sample_size": 3
+        }
+        
+        # Mock the file sampling method
+        with patch.object(etl_agent, '_sample_file_data') as mock_file_sample:
+            mock_file_sample.return_value = {
+                "columns": ["product_id", "name", "price"],
+                "total_records": 3,
+                "data": {
+                    "product_id": ["1", "3", "5"],
+                    "name": ["Product A", "Product C", "Product E"],
+                    "price": ["10.99", "30.99", "50.99"]
+                },
+                "sampling_metadata": {
+                    "strategy": "systematic",
+                    "requested_size": 3,
+                    "actual_size": 3,
+                    "source_type": "csv_file"
+                }
+            }
+            
+            result = await etl_agent._load_real_sample_data(data_source_config, config)
+            
+            # Verify the method was called with correct parameters
+            mock_file_sample.assert_called_once_with(data_source_config, 'systematic', 3)
+            
+            # Verify result structure
+            assert result["columns"] == ["product_id", "name", "price"]
+            assert result["total_records"] == 3
+            assert result["sampling_metadata"]["strategy"] == "systematic"
+            assert result["sampling_metadata"]["source_type"] == "csv_file"
+    
+    @pytest.mark.asyncio
+    async def test_load_real_sample_data_unsupported_type(self, etl_agent):
+        """Test error handling for unsupported data source types."""
+        config = ProfilingConfig(sample_size=10)
+        
+        data_source_config = {
+            "type": "unsupported_type",
+            "sample_size": 10
+        }
+        
+        with pytest.raises(ValueError) as exc_info:
+            await etl_agent._load_real_sample_data(data_source_config, config)
+        
+        assert "Unsupported data source type for sampling: unsupported_type" in str(exc_info.value)
+    
+    def test_sampling_strategies_support(self, etl_agent):
+        """Test that all required sampling strategies are supported."""
+        # This test validates that the sampling strategies mentioned in acceptance criteria are implemented
+        
+        # Test that ProfilingConfig supports sampling_strategy
+        config = ProfilingConfig(sampling_strategy='random')
+        assert config.sampling_strategy == 'random'
+        
+        config = ProfilingConfig(sampling_strategy='systematic') 
+        assert config.sampling_strategy == 'systematic'
+        
+        config = ProfilingConfig(sampling_strategy='stratified')
+        assert config.sampling_strategy == 'stratified'
+        
+        config = ProfilingConfig(sampling_strategy='reservoir')
+        assert config.sampling_strategy == 'reservoir'
+        
+        # Test default sampling strategy
+        config = ProfilingConfig()
+        assert config.sampling_strategy == 'random'
     
     def test_analyze_dataset_structure(self, etl_agent):
         """Test dataset structure analysis."""

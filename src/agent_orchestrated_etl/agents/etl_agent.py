@@ -35,6 +35,7 @@ class ProfilingConfig:
     # Sampling settings
     sample_size: Optional[int] = 10000  # None for full dataset
     sample_percentage: float = 10.0  # Used if sample_size is None
+    sampling_strategy: Optional[str] = 'random'  # random, systematic, stratified, reservoir
     random_seed: int = 42
     
     # Statistical analysis settings
@@ -576,6 +577,472 @@ Respond with structured data when appropriate, including metrics and status info
             }
         }
     
+    async def _load_real_sample_data(self, data_source_config: Dict[str, Any], config: ProfilingConfig) -> Dict[str, Any]:
+        """Load real sample data from actual data sources using intelligent sampling strategies."""
+        import random
+        import statistics
+        
+        source_type = data_source_config.get('type', '').lower()
+        sampling_strategy = data_source_config.get('sampling_strategy', config.sampling_strategy or 'random')
+        sample_size = data_source_config.get('sample_size', config.sample_size or 1000)
+        
+        if source_type == 'database':
+            return await self._sample_database_data(data_source_config, sampling_strategy, sample_size)
+        elif source_type == 'file':
+            return await self._sample_file_data(data_source_config, sampling_strategy, sample_size)
+        elif source_type == 'api':
+            return await self._sample_api_data(data_source_config, sampling_strategy, sample_size)
+        elif source_type == 's3':
+            return await self._sample_s3_data(data_source_config, sampling_strategy, sample_size)
+        else:
+            raise ValueError(f"Unsupported data source type for sampling: {source_type}")
+    
+    async def _sample_database_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from database using various sampling strategies."""
+        from sqlalchemy import create_engine, text
+        import pandas as pd
+        
+        connection_string = config.get('connection_string')
+        table_name = config.get('table_name')
+        query = config.get('query')
+        
+        if not connection_string:
+            raise ValueError("Database connection_string required for sampling")
+        
+        # Determine base query
+        if query:
+            base_query = f"({query}) as sample_query"
+        elif table_name:
+            base_query = table_name
+        else:
+            raise ValueError("Either 'query' or 'table_name' required for database sampling")
+        
+        engine = create_engine(connection_string)
+        
+        try:
+            with engine.connect() as conn:
+                # Get total record count for percentage-based sampling
+                if not query:
+                    count_result = conn.execute(text(f"SELECT COUNT(*) FROM {base_query}"))
+                    total_records = count_result.scalar()
+                else:
+                    # For queries, we'll use the sample size directly
+                    total_records = sample_size * 2  # Estimate
+                
+                # Apply sampling strategy
+                if strategy == 'random':
+                    if connection_string.startswith('sqlite://'):
+                        sample_query = f"SELECT * FROM {base_query} ORDER BY RANDOM() LIMIT {sample_size}"
+                    elif 'mysql' in connection_string.lower():
+                        sample_query = f"SELECT * FROM {base_query} ORDER BY RAND() LIMIT {sample_size}"
+                    else:  # PostgreSQL and others
+                        sample_query = f"SELECT * FROM {base_query} ORDER BY RANDOM() LIMIT {sample_size}"
+                
+                elif strategy == 'systematic':
+                    # Systematic sampling: every nth record
+                    if total_records > sample_size:
+                        step = max(1, total_records // sample_size)
+                        if connection_string.startswith('sqlite://'):
+                            sample_query = f"""
+                                SELECT * FROM (
+                                    SELECT *, ROW_NUMBER() OVER (ORDER BY ROWID) as rn 
+                                    FROM {base_query}
+                                ) WHERE rn % {step} = 0 LIMIT {sample_size}
+                            """
+                        else:
+                            sample_query = f"""
+                                SELECT * FROM (
+                                    SELECT *, ROW_NUMBER() OVER (ORDER BY 1) as rn 
+                                    FROM {base_query}
+                                ) ranked WHERE rn % {step} = 0 LIMIT {sample_size}
+                            """
+                    else:
+                        sample_query = f"SELECT * FROM {base_query} LIMIT {sample_size}"
+                
+                elif strategy == 'stratified':
+                    # Stratified sampling by a column (if specified)
+                    strata_column = config.get('strata_column')
+                    if strata_column:
+                        sample_query = f"""
+                            SELECT * FROM (
+                                SELECT *, ROW_NUMBER() OVER (PARTITION BY {strata_column} ORDER BY RANDOM()) as rn
+                                FROM {base_query}
+                            ) WHERE rn <= {sample_size // 3} LIMIT {sample_size}
+                        """
+                    else:
+                        # Fall back to random sampling
+                        sample_query = f"SELECT * FROM {base_query} ORDER BY RANDOM() LIMIT {sample_size}"
+                
+                else:
+                    # Default to simple LIMIT
+                    sample_query = f"SELECT * FROM {base_query} LIMIT {sample_size}"
+                
+                # Execute sampling query
+                result = conn.execute(text(sample_query))
+                columns = list(result.keys())
+                rows = result.fetchall()
+                
+                # Convert to dictionary format
+                data = {}
+                for col in columns:
+                    data[col] = []
+                
+                for row in rows:
+                    for i, col in enumerate(columns):
+                        data[col].append(row[i])
+                
+                return {
+                    "columns": columns,
+                    "total_records": len(rows),
+                    "data": data,
+                    "sampling_metadata": {
+                        "strategy": strategy,
+                        "requested_size": sample_size,
+                        "actual_size": len(rows),
+                        "source_type": "database",
+                        "table_name": table_name,
+                        "connection_string": connection_string.split('@')[0] + '@***'  # Hide credentials
+                    }
+                }
+                
+        except Exception as e:
+            raise RuntimeError(f"Database sampling failed: {str(e)}")
+        finally:
+            engine.dispose()
+    
+    async def _sample_file_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from files using various sampling strategies."""
+        import csv
+        import json
+        import random
+        
+        file_path = config.get('file_path')
+        file_format = config.get('file_format', 'csv').lower()
+        
+        if not file_path:
+            raise ValueError("file_path required for file sampling")
+        
+        if file_format == 'csv':
+            return await self._sample_csv_file(file_path, strategy, sample_size)
+        elif file_format == 'json':
+            return await self._sample_json_file(file_path, strategy, sample_size)
+        elif file_format == 'jsonl':
+            return await self._sample_jsonl_file(file_path, strategy, sample_size)
+        else:
+            raise ValueError(f"Unsupported file format for sampling: {file_format}")
+    
+    async def _sample_csv_file(self, file_path: str, strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from CSV file."""
+        import csv
+        import random
+        
+        # First pass: count total rows and get headers
+        with open(file_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            total_rows = sum(1 for _ in reader)
+        
+        # Second pass: apply sampling strategy
+        selected_rows = []
+        
+        if strategy == 'random':
+            # Random sampling: collect all data then randomly select
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                all_rows = list(reader)
+                selected_rows = random.sample(all_rows, min(sample_size, len(all_rows)))
+        
+        elif strategy == 'systematic':
+            # Systematic sampling: every nth row
+            step = max(1, total_rows // sample_size) if total_rows > sample_size else 1
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for i, row in enumerate(reader):
+                    if i % step == 0 and len(selected_rows) < sample_size:
+                        selected_rows.append(row)
+        
+        elif strategy == 'reservoir':
+            # Reservoir sampling: memory-efficient for large files
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                reservoir = []
+                for i, row in enumerate(reader):
+                    if i < sample_size:
+                        reservoir.append(row)
+                    else:
+                        # Replace with decreasing probability
+                        j = random.randint(0, i)
+                        if j < sample_size:
+                            reservoir[j] = row
+                selected_rows = reservoir
+        
+        else:
+            # Default: take first n rows
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                selected_rows = [row for i, row in enumerate(reader) if i < sample_size]
+        
+        # Convert to column-based format
+        data = {}
+        for header in headers:
+            data[header] = []
+        
+        for row in selected_rows:
+            for header in headers:
+                data[header].append(row.get(header))
+        
+        return {
+            "columns": headers,
+            "total_records": len(selected_rows),
+            "data": data,
+            "sampling_metadata": {
+                "strategy": strategy,
+                "requested_size": sample_size,
+                "actual_size": len(selected_rows),
+                "source_type": "csv_file",
+                "file_path": file_path,
+                "total_file_rows": total_rows
+            }
+        }
+    
+    async def _sample_json_file(self, file_path: str, strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from JSON file."""
+        import json
+        import random
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if isinstance(data, list):
+            records = data
+        elif isinstance(data, dict) and 'data' in data:
+            records = data['data']
+        else:
+            records = [data]
+        
+        # Apply sampling strategy
+        if strategy == 'random':
+            selected_records = random.sample(records, min(sample_size, len(records)))
+        elif strategy == 'systematic':
+            step = max(1, len(records) // sample_size) if len(records) > sample_size else 1
+            selected_records = [records[i] for i in range(0, len(records), step)][:sample_size]
+        else:
+            selected_records = records[:sample_size]
+        
+        # Extract columns from first record
+        if selected_records and isinstance(selected_records[0], dict):
+            columns = list(selected_records[0].keys())
+        else:
+            columns = ['value']
+            selected_records = [{'value': record} for record in selected_records]
+        
+        # Convert to column-based format
+        column_data = {}
+        for col in columns:
+            column_data[col] = []
+        
+        for record in selected_records:
+            for col in columns:
+                column_data[col].append(record.get(col))
+        
+        return {
+            "columns": columns,
+            "total_records": len(selected_records),
+            "data": column_data,
+            "sampling_metadata": {
+                "strategy": strategy,
+                "requested_size": sample_size,
+                "actual_size": len(selected_records),
+                "source_type": "json_file",
+                "file_path": file_path,
+                "total_file_records": len(records)
+            }
+        }
+    
+    async def _sample_jsonl_file(self, file_path: str, strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from JSON Lines file."""
+        import json
+        import random
+        
+        # First pass: count lines
+        with open(file_path, 'r', encoding='utf-8') as f:
+            total_lines = sum(1 for line in f if line.strip())
+        
+        selected_records = []
+        
+        if strategy == 'random':
+            # Random line selection
+            line_indices = random.sample(range(total_lines), min(sample_size, total_lines))
+            line_indices.sort()
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i in line_indices:
+                        line = line.strip()
+                        if line:
+                            selected_records.append(json.loads(line))
+        
+        elif strategy == 'systematic':
+            step = max(1, total_lines // sample_size) if total_lines > sample_size else 1
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i % step == 0 and len(selected_records) < sample_size:
+                        line = line.strip()
+                        if line:
+                            selected_records.append(json.loads(line))
+        
+        else:
+            # Default: first n lines
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= sample_size:
+                        break
+                    line = line.strip()
+                    if line:
+                        selected_records.append(json.loads(line))
+        
+        # Extract columns
+        all_columns = set()
+        for record in selected_records:
+            if isinstance(record, dict):
+                all_columns.update(record.keys())
+        
+        columns = list(all_columns)
+        
+        # Convert to column-based format
+        column_data = {}
+        for col in columns:
+            column_data[col] = []
+        
+        for record in selected_records:
+            for col in columns:
+                column_data[col].append(record.get(col))
+        
+        return {
+            "columns": columns,
+            "total_records": len(selected_records),
+            "data": column_data,
+            "sampling_metadata": {
+                "strategy": strategy,
+                "requested_size": sample_size,
+                "actual_size": len(selected_records),
+                "source_type": "jsonl_file",
+                "file_path": file_path,
+                "total_file_lines": total_lines
+            }
+        }
+    
+    async def _sample_api_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from API endpoints."""
+        # Use existing API extraction with sampling parameters
+        api_config = config.copy()
+        api_config['max_records'] = sample_size
+        api_config['sampling_strategy'] = strategy
+        
+        result = await self._extract_from_api(api_config)
+        
+        if result.get('status') == 'completed':
+            data = result.get('data', [])
+            if data and isinstance(data[0], dict):
+                columns = list(data[0].keys())
+                
+                # Convert to column-based format
+                column_data = {}
+                for col in columns:
+                    column_data[col] = []
+                
+                for record in data:
+                    for col in columns:
+                        column_data[col].append(record.get(col))
+                
+                return {
+                    "columns": columns,
+                    "total_records": len(data),
+                    "data": column_data,
+                    "sampling_metadata": {
+                        "strategy": strategy,
+                        "requested_size": sample_size,
+                        "actual_size": len(data),
+                        "source_type": "api",
+                        "url": config.get('url', ''),
+                        "api_type": config.get('api_type', 'rest')
+                    }
+                }
+        
+        raise RuntimeError(f"API sampling failed: {result.get('error_message', 'Unknown error')}")
+    
+    async def _sample_s3_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
+        """Sample data from S3 objects."""
+        import boto3
+        import io
+        import random
+        
+        bucket_name = config.get('bucket_name')
+        prefix = config.get('prefix', '')
+        file_format = config.get('file_format', 'csv').lower()
+        
+        if not bucket_name:
+            raise ValueError("bucket_name required for S3 sampling")
+        
+        s3_client = boto3.client('s3')
+        
+        # List objects to sample from
+        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        objects = [obj for obj in response.get('Contents', []) if obj['Key'].endswith(f'.{file_format}')]
+        
+        if not objects:
+            raise ValueError(f"No {file_format} files found in s3://{bucket_name}/{prefix}")
+        
+        # Sample from multiple files if needed
+        sample_data = {"columns": [], "total_records": 0, "data": {}}
+        records_per_file = max(1, sample_size // len(objects))
+        
+        for obj in objects[:min(len(objects), sample_size // records_per_file + 1)]:
+            # Download file content
+            response = s3_client.get_object(Bucket=bucket_name, Key=obj['Key'])
+            content = response['Body'].read().decode('utf-8')
+            
+            # Sample from this file
+            if file_format == 'csv':
+                file_sample = await self._sample_csv_content(content, strategy, records_per_file)
+            elif file_format == 'json':
+                file_sample = await self._sample_json_content(content, strategy, records_per_file)
+            else:
+                continue
+            
+            # Merge with existing sample
+            if not sample_data["columns"]:
+                sample_data["columns"] = file_sample["columns"]
+                sample_data["data"] = {col: [] for col in file_sample["columns"]}
+            
+            for col in file_sample["columns"]:
+                if col in sample_data["data"]:
+                    sample_data["data"][col].extend(file_sample["data"][col])
+            
+            sample_data["total_records"] += file_sample["total_records"]
+            
+            if sample_data["total_records"] >= sample_size:
+                break
+        
+        # Trim to requested sample size
+        if sample_data["total_records"] > sample_size:
+            for col in sample_data["data"]:
+                sample_data["data"][col] = sample_data["data"][col][:sample_size]
+            sample_data["total_records"] = sample_size
+        
+        sample_data["sampling_metadata"] = {
+            "strategy": strategy,
+            "requested_size": sample_size,
+            "actual_size": sample_data["total_records"],
+            "source_type": "s3",
+            "bucket_name": bucket_name,
+            "prefix": prefix,
+            "file_format": file_format,
+            "files_sampled": len([obj for obj in objects if sample_data["total_records"] > 0])
+        }
+        
+        return sample_data
+
     async def _load_sample_data(self, data_source: str, config: ProfilingConfig) -> Dict[str, Any]:
         """Load sample data for profiling (mock implementation)."""
         # In a real implementation, this would:
