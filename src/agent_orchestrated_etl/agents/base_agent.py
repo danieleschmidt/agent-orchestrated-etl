@@ -73,13 +73,26 @@ class AgentConfig:
 
 
 class AgentCapability(BaseModel):
-    """Represents a capability that an agent possesses."""
+    """Represents a capability that an agent possesses with enhanced metadata."""
     
     name: str = Field(description="Name of the capability")
     description: str = Field(description="Description of what this capability does")
     input_types: List[str] = Field(description="Types of input this capability accepts")
     output_types: List[str] = Field(description="Types of output this capability produces")
     confidence_level: float = Field(ge=0.0, le=1.0, description="Agent's confidence in this capability")
+    
+    # Enhanced metadata for intelligent selection
+    specialization_areas: List[str] = Field(default_factory=list, description="Areas of specialization within this capability")
+    performance_metrics: Dict[str, Any] = Field(default_factory=dict, description="Performance metrics for this capability")
+    resource_requirements: Dict[str, Any] = Field(default_factory=dict, description="Resource requirements for this capability")
+    version: str = Field(default="1.0.0", description="Version of this capability implementation")
+    last_updated: float = Field(default_factory=time.time, description="Last update timestamp")
+    tags: List[str] = Field(default_factory=list, description="Tags for capability categorization")
+    prerequisites: List[str] = Field(default_factory=list, description="Prerequisites for using this capability")
+    
+    class Config:
+        """Pydantic configuration."""
+        validate_assignment = True
 
 
 class AgentTask(BaseModel):
@@ -117,6 +130,22 @@ class BaseAgent(ABC):
         self.capabilities: List[AgentCapability] = []
         self.active_tasks: Dict[str, AgentTask] = {}
         self.task_history: List[AgentTask] = []
+        
+        # Performance tracking for enhanced selection
+        self.performance_metrics = {
+            "total_tasks": 0,
+            "successful_tasks": 0,
+            "failed_tasks": 0,
+            "avg_execution_time": 0.0,
+            "total_execution_time": 0.0,
+            "success_rate": 1.0,
+            "error_rate": 0.0,
+            "throughput": 0.0,
+            "last_activity": time.time(),
+            "availability": 1.0
+        }
+        self.current_load = 0.0
+        self.specialization = getattr(config, 'specialization', 'general')
         
         # Synchronization
         self._task_lock = asyncio.Lock()
@@ -398,6 +427,58 @@ class BaseAgent(ABC):
     def has_capability(self, capability_name: str) -> bool:
         """Check if agent has a specific capability."""
         return any(cap.name == capability_name for cap in self.capabilities)
+    
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get current performance metrics for agent selection."""
+        return self.performance_metrics.copy()
+    
+    def get_current_load(self) -> float:
+        """Get current load factor (0.0 = idle, 1.0 = fully loaded)."""
+        active_task_count = len(self.active_tasks)
+        max_concurrent_tasks = self.config.extra_config.get('max_concurrent_tasks', 5)
+        return min(active_task_count / max_concurrent_tasks, 1.0)
+    
+    def get_specialization_score(self, task_type: str) -> float:
+        """Get specialization score for a specific task type."""
+        # Base score based on agent specialization
+        if self.specialization == task_type or self.specialization == 'general':
+            base_score = 0.8 if self.specialization == task_type else 0.5
+        else:
+            base_score = 0.3
+        
+        # Adjust based on historical performance for this task type
+        task_type_history = [t for t in self.task_history if t.task_type == task_type]
+        if task_type_history:
+            successful_tasks = len([t for t in task_type_history if t.status == 'completed'])
+            success_rate = successful_tasks / len(task_type_history)
+            base_score = (base_score + success_rate) / 2
+        
+        return min(base_score, 1.0)
+    
+    def update_performance_metrics(self, task: AgentTask, execution_time: float, success: bool):
+        """Update performance metrics after task completion."""
+        self.performance_metrics["total_tasks"] += 1
+        self.performance_metrics["total_execution_time"] += execution_time
+        self.performance_metrics["last_activity"] = time.time()
+        
+        if success:
+            self.performance_metrics["successful_tasks"] += 1
+        else:
+            self.performance_metrics["failed_tasks"] += 1
+        
+        # Update calculated metrics
+        total_tasks = self.performance_metrics["total_tasks"]
+        self.performance_metrics["success_rate"] = self.performance_metrics["successful_tasks"] / total_tasks
+        self.performance_metrics["error_rate"] = self.performance_metrics["failed_tasks"] / total_tasks
+        self.performance_metrics["avg_execution_time"] = self.performance_metrics["total_execution_time"] / total_tasks
+        
+        # Calculate throughput (tasks per minute)
+        if execution_time > 0:
+            self.performance_metrics["throughput"] = 60.0 / execution_time
+        
+        # Update availability (simplified calculation)
+        error_rate = self.performance_metrics["error_rate"]
+        self.performance_metrics["availability"] = max(0.5, 1.0 - error_rate)
     
     def get_status(self) -> Dict[str, Any]:
         """Get current agent status and metrics."""

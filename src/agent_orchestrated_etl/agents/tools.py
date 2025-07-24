@@ -609,42 +609,377 @@ class ValidateDataQualityTool(ETLTool):
 
 
 class QueryDataTool(ETLTool):
-    """Tool for querying data sources."""
+    """Tool for querying data sources with caching, security, and export capabilities."""
     
     name: str = "query_data"
     description: str = "Execute queries against data sources"
     
+    def __init__(self):
+        super().__init__()
+        self._query_cache = {}
+        self._query_history = []
+        self._audit_log = []
+        self._query_id_counter = 0
+    
     class QueryDataSchema(ETLToolSchema):
-        data_source: str = Field(description="Data source identifier")
-        query: str = Field(description="Query to execute")
+        data_source: str = Field(description="Data source identifier (connection string or source config)")
+        query: str = Field(description="SQL query to execute")
         limit: int = Field(default=100, description="Maximum number of results")
-        format: str = Field(default="json", description="Output format (json, csv, etc.)")
+        format: str = Field(default="json", description="Output format (json, csv, xlsx)")
+        use_cache: bool = Field(default=True, description="Use cached results if available")
+        security_level: str = Field(default="standard", description="Security validation level (strict, standard, permissive)")
     
     args_schema: Type[BaseModel] = QueryDataSchema
     
-    def _execute(self, data_source: str, query: str, limit: int = 100, format: str = "json") -> Dict[str, Any]:
-        """Execute data query."""
+    def _execute(self, data_source: str, query: str, limit: int = 100, format: str = "json", 
+                use_cache: bool = True, security_level: str = "standard") -> Dict[str, Any]:
+        """Execute data query with comprehensive features."""
+        import hashlib
+        import uuid
+        from sqlalchemy import create_engine, text
+        import pandas as pd
+        
+        start_time = time.time()
+        query_id = str(uuid.uuid4())[:8]
+        
         try:
-            # This would implement actual data querying
-            query_result = {
+            # Security validation
+            security_result = self._validate_query_security(query, security_level)
+            if not security_result["is_safe"]:
+                self._log_audit_event("security_violation", query, data_source, security_result["violation_reason"])
+                return {
+                    "query_id": query_id,
+                    "status": "blocked",
+                    "security_violation": security_result["violation_reason"],
+                    "query": query[:100] + "..." if len(query) > 100 else query,
+                    "execution_timestamp": time.time()
+                }
+            
+            # Check cache if enabled
+            cache_key = self._generate_cache_key(data_source, query, limit)
+            if use_cache and cache_key in self._query_cache:
+                cached_result = self._query_cache[cache_key].copy()
+                cached_result.update({
+                    "query_id": query_id,
+                    "cache_hit": True,
+                    "execution_timestamp": time.time(),
+                    "cache_age_seconds": time.time() - cached_result.get("cache_timestamp", 0)
+                })
+                self._add_to_history(query_id, query, data_source, "cached", time.time() - start_time)
+                return self._format_results(cached_result, format)
+            
+            # Execute query
+            execution_result = self._execute_sql_query(data_source, query, limit)
+            
+            # Add metadata
+            execution_time = time.time() - start_time
+            execution_result.update({
+                "query_id": query_id,
                 "data_source": data_source,
                 "query": query,
                 "limit": limit,
                 "format": format,
                 "execution_timestamp": time.time(),
-                "results": {
-                    "row_count": 0,  # Placeholder
-                    "columns": [],  # Placeholder
-                    "data": [],  # Placeholder
-                },
-                "status": "completed",
-                "message": "Query executed successfully (implementation would run actual query)",
-            }
+                "cache_hit": False,
+                "performance_metrics": {
+                    "execution_time_ms": round(execution_time * 1000, 2),
+                    "rows_examined": execution_result.get("rows_examined", "unknown"),
+                    "query_plan": execution_result.get("query_plan", "not_available")
+                }
+            })
             
-            return query_result
+            # Cache result
+            if use_cache and execution_result.get("status") == "completed":
+                cache_result = execution_result.copy()
+                cache_result["cache_timestamp"] = time.time()
+                self._query_cache[cache_key] = cache_result
+                self._cleanup_cache()  # Remove old entries
+            
+            # Add to history
+            self._add_to_history(query_id, query, data_source, execution_result.get("status", "unknown"), execution_time)
+            
+            # Log audit event
+            self._log_audit_event("query_executed", query, data_source, f"rows_returned:{execution_result.get('results', {}).get('row_count', 0)}")
+            
+            return self._format_results(execution_result, format)
             
         except Exception as e:
+            error_time = time.time() - start_time
+            self._log_audit_event("query_error", query, data_source, str(e))
+            self._add_to_history(query_id, query, data_source, "error", error_time)
             raise ToolException(f"Data query failed: {e}", tool_name=self.name) from e
+    
+    def _execute_sql_query(self, data_source: str, query: str, limit: int) -> Dict[str, Any]:
+        """Execute SQL query against the data source."""
+        from sqlalchemy import create_engine, text
+        import pandas as pd
+        
+        try:
+            # Create database engine
+            if data_source.startswith(('sqlite://', 'postgresql://', 'mysql://', 'oracle://')):
+                connection_string = data_source
+            else:
+                # Assume it's a database name and use SQLite default
+                connection_string = f"sqlite:///{data_source}.db"
+            
+            engine = create_engine(connection_string, pool_timeout=30, pool_recycle=3600)
+            
+            # Add LIMIT to query if not present and limit specified
+            processed_query = self._add_limit_to_query(query, limit)
+            
+            with engine.connect() as conn:
+                # Get query plan for performance metrics (if supported)
+                query_plan = self._get_query_plan(conn, processed_query)
+                
+                # Execute query
+                result = conn.execute(text(processed_query))
+                columns = list(result.keys())
+                rows = result.fetchall()
+                
+                # Convert to list of dictionaries
+                data = []
+                for row in rows:
+                    data.append(dict(zip(columns, row)))
+                
+                return {
+                    "status": "completed",
+                    "results": {
+                        "row_count": len(data),
+                        "columns": columns,
+                        "data": data,
+                        "truncated": len(rows) == limit  # Indicates if more data available
+                    },
+                    "rows_examined": len(rows),
+                    "query_plan": query_plan,
+                    "message": f"Query executed successfully, returned {len(data)} rows"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error_message": str(e),
+                "results": {
+                    "row_count": 0,
+                    "columns": [],
+                    "data": []
+                }
+            }
+        finally:
+            try:
+                engine.dispose()
+            except:
+                pass
+    
+    def _validate_query_security(self, query: str, security_level: str) -> Dict[str, Any]:
+        """Validate query for security risks."""
+        import re
+        
+        query_lower = query.lower().strip()
+        
+        # Define dangerous patterns
+        dangerous_patterns = [
+            r'\bdrop\s+table\b',
+            r'\bdrop\s+database\b',
+            r'\bdelete\s+from\b.*where.*1\s*=\s*1',
+            r'\btruncate\s+table\b',
+            r'\balter\s+table\b',
+            r'\bcreate\s+table\b',
+            r'\binsert\s+into\b',
+            r'\bupdate\s+.*set\b',
+            r';\s*drop\b',
+            r';\s*delete\b',
+            r'--.*drop\b',
+            r'/\*.*\*/',
+            r'\bunion\s+.*select\b.*\bfrom\b',
+        ]
+        
+        moderate_patterns = [
+            r'\bexec\b',
+            r'\bexecute\b',
+            r'\bsp_\w+',
+            r'\bxp_\w+',
+            r'@@\w+',
+        ]
+        
+        # Check for dangerous patterns
+        for pattern in dangerous_patterns:
+            if re.search(pattern, query_lower, re.IGNORECASE):
+                return {
+                    "is_safe": False,
+                    "violation_reason": f"Dangerous SQL pattern detected: {pattern}",
+                    "security_level": security_level
+                }
+        
+        # Check moderate patterns for strict security
+        if security_level == "strict":
+            for pattern in moderate_patterns:
+                if re.search(pattern, query_lower, re.IGNORECASE):
+                    return {
+                        "is_safe": False,
+                        "violation_reason": f"Potentially unsafe SQL pattern detected: {pattern}",
+                        "security_level": security_level
+                    }
+        
+        # Check for basic SELECT requirement in strict mode
+        if security_level == "strict" and not query_lower.strip().startswith('select'):
+            return {
+                "is_safe": False,
+                "violation_reason": "Only SELECT queries allowed in strict mode",
+                "security_level": security_level
+            }
+        
+        return {
+            "is_safe": True,
+            "violation_reason": None,
+            "security_level": security_level
+        }
+    
+    def _add_limit_to_query(self, query: str, limit: int) -> str:
+        """Add LIMIT clause to query if not present."""
+        query_lower = query.lower().strip()
+        
+        # Check if LIMIT already exists
+        if 'limit' in query_lower:
+            return query
+        
+        # Add LIMIT clause
+        if query.strip().endswith(';'):
+            return f"{query.rstrip(';')} LIMIT {limit};"
+        else:
+            return f"{query} LIMIT {limit}"
+    
+    def _get_query_plan(self, conn, query: str) -> str:
+        """Get query execution plan if supported."""
+        try:
+            # Try to get query plan (SQLite syntax)
+            plan_result = conn.execute(text(f"EXPLAIN QUERY PLAN {query}"))
+            plan_rows = plan_result.fetchall()
+            return "\n".join([str(row) for row in plan_rows])
+        except:
+            return "Query plan not available"
+    
+    def _generate_cache_key(self, data_source: str, query: str, limit: int) -> str:
+        """Generate cache key for query."""
+        import hashlib
+        cache_string = f"{data_source}:{query}:{limit}"
+        return hashlib.md5(cache_string.encode()).hexdigest()
+    
+    def _cleanup_cache(self, max_entries: int = 1000):
+        """Remove old cache entries to prevent memory growth."""
+        if len(self._query_cache) > max_entries:
+            # Remove oldest entries (simple LRU)
+            sorted_cache = sorted(
+                self._query_cache.items(),
+                key=lambda x: x[1].get("cache_timestamp", 0)
+            )
+            # Keep only the newest 80% of entries
+            keep_count = int(max_entries * 0.8)
+            self._query_cache = dict(sorted_cache[-keep_count:])
+    
+    def _format_results(self, result: Dict[str, Any], format: str) -> Dict[str, Any]:
+        """Format query results in requested format."""
+        if format.lower() == "csv":
+            return self._format_as_csv(result)
+        elif format.lower() == "xlsx":
+            return self._format_as_excel(result)
+        else:
+            return result  # Default JSON format
+    
+    def _format_as_csv(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format results as CSV."""
+        import csv
+        import io
+        
+        try:
+            data = result.get("results", {}).get("data", [])
+            columns = result.get("results", {}).get("columns", [])
+            
+            if not data or not columns:
+                result["csv_data"] = ""
+                return result
+            
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=columns)
+            writer.writeheader()
+            writer.writerows(data)
+            
+            result["csv_data"] = output.getvalue()
+            result["format"] = "csv"
+            return result
+            
+        except Exception as e:
+            result["format_error"] = f"CSV formatting failed: {e}"
+            return result
+    
+    def _format_as_excel(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Format results as Excel (placeholder - would require openpyxl)."""
+        # This would require openpyxl library in a real implementation
+        result["format"] = "xlsx"
+        result["excel_note"] = "Excel export would be implemented with openpyxl library"
+        return result
+    
+    def _add_to_history(self, query_id: str, query: str, data_source: str, status: str, execution_time: float):
+        """Add query to execution history."""
+        self._query_history.append({
+            "query_id": query_id,
+            "query": query,
+            "data_source": data_source,
+            "status": status,
+            "execution_time": execution_time,
+            "timestamp": time.time()
+        })
+        
+        # Keep only last 10000 entries
+        if len(self._query_history) > 10000:
+            self._query_history = self._query_history[-10000:]
+    
+    def _log_audit_event(self, event_type: str, query: str, data_source: str, details: str):
+        """Log audit event for security and compliance."""
+        self._audit_log.append({
+            "event_type": event_type,
+            "query": query[:200] + "..." if len(query) > 200 else query,  # Truncate long queries
+            "data_source": data_source,
+            "details": details,
+            "timestamp": time.time(),
+            "user": "system"  # Would be actual user in real system
+        })
+        
+        # Keep only last 50000 audit entries
+        if len(self._audit_log) > 50000:
+            self._audit_log = self._audit_log[-50000:]
+    
+    def get_query_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent query history."""
+        return self._query_history[-limit:]
+    
+    def get_audit_log(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent audit log entries."""
+        return self._audit_log[-limit:]
+    
+    def export_results(self, query_id: str, format: str = "csv") -> Dict[str, Any]:
+        """Export query results in specified format."""
+        # Find query in history
+        query_entry = None
+        for entry in reversed(self._query_history):
+            if entry["query_id"] == query_id:
+                query_entry = entry
+                break
+        
+        if not query_entry:
+            return {
+                "status": "error",
+                "error_message": f"Query ID {query_id} not found in history"
+            }
+        
+        # For now, return export metadata (would generate actual files in real implementation)
+        return {
+            "query_id": query_id,
+            "format": format,
+            "status": "ready",
+            "download_url": f"/exports/{query_id}.{format}",
+            "file_size": "estimated_size",
+            "expires_at": time.time() + 3600  # 1 hour expiry
+        }
 
 
 class MonitorPipelineTool(ETLTool):
