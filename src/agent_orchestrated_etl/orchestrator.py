@@ -20,10 +20,488 @@ from .graceful_degradation import with_graceful_degradation, DegradationConfigs
 from .logging_config import get_logger, TimedOperation, LogContext
 
 
-# Placeholder load function for demonstration purposes.
-def load_data(data: Any) -> bool:
-    """Pretend to load data and return success."""
-    return True
+def load_data(data: Any, destination_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Load data to configured destination with comprehensive features."""
+    import time
+    from typing import Union
+    
+    start_time = time.time()
+    
+    try:
+        # Use DataLoader for comprehensive loading functionality
+        loader = DataLoader()
+        result = loader.load(data, destination_config or {})
+        
+        result.update({
+            "load_time": time.time() - start_time,
+            "status": result.get("status", "completed")
+        })
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error_message": str(e),
+            "error_type": type(e).__name__,
+            "load_time": time.time() - start_time,
+            "records_loaded": 0
+        }
+
+
+class DataLoader:
+    """Comprehensive data loading system with database support, transactions, and data quality validation."""
+    
+    def __init__(self):
+        self.logger = get_logger("agent_etl.data_loader")
+        self.supported_destinations = ['database', 'file', 's3', 'api']
+    
+    def load(self, data: Any, destination_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Load data to specified destination with comprehensive features."""
+        destination_type = destination_config.get('type', 'database').lower()
+        
+        if destination_type not in self.supported_destinations:
+            raise ValueError(f"Unsupported destination type: {destination_type}")
+        
+        # Validate data before loading
+        validation_result = self._validate_data_quality(data, destination_config.get('validation_rules', []))
+        if validation_result.get('status') == 'failed':
+            return {
+                "status": "validation_failed",
+                "validation_errors": validation_result.get('errors', []),
+                "records_loaded": 0
+            }
+        
+        # Route to appropriate loader
+        if destination_type == 'database':
+            return self._load_to_database(data, destination_config)
+        elif destination_type == 'file':
+            return self._load_to_file(data, destination_config)
+        elif destination_type == 's3':
+            return self._load_to_s3(data, destination_config)
+        elif destination_type == 'api':
+            return self._load_to_api(data, destination_config)
+        else:
+            raise ValueError(f"Destination type '{destination_type}' not implemented")
+    
+    def _validate_data_quality(self, data: Any, validation_rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Validate data quality before loading."""
+        if not validation_rules:
+            return {"status": "passed", "errors": []}
+        
+        errors = []
+        
+        # Convert data to list if not already
+        if not isinstance(data, list):
+            data = [data] if data is not None else []
+        
+        for rule in validation_rules:
+            rule_type = rule.get('type', '').lower()
+            
+            if rule_type == 'not_null':
+                fields = rule.get('fields', [])
+                for record in data:
+                    if isinstance(record, dict):
+                        for field in fields:
+                            if field not in record or record[field] is None:
+                                errors.append(f"Field '{field}' cannot be null")
+            
+            elif rule_type == 'data_type':
+                field = rule.get('field')
+                expected_type = rule.get('expected_type', 'string')
+                for i, record in enumerate(data):
+                    if isinstance(record, dict) and field in record:
+                        value = record[field]
+                        if not self._check_data_type(value, expected_type):
+                            errors.append(f"Record {i}: Field '{field}' must be of type {expected_type}")
+            
+            elif rule_type == 'range':
+                field = rule.get('field')
+                min_val = rule.get('min')
+                max_val = rule.get('max')
+                for i, record in enumerate(data):
+                    if isinstance(record, dict) and field in record:
+                        value = record[field]
+                        if isinstance(value, (int, float)):
+                            if min_val is not None and value < min_val:
+                                errors.append(f"Record {i}: Field '{field}' value {value} below minimum {min_val}")
+                            if max_val is not None and value > max_val:
+                                errors.append(f"Record {i}: Field '{field}' value {value} above maximum {max_val}")
+        
+        return {
+            "status": "failed" if errors else "passed",
+            "errors": errors,
+            "rules_checked": len(validation_rules)
+        }
+    
+    def _check_data_type(self, value: Any, expected_type: str) -> bool:
+        """Check if value matches expected data type."""
+        type_mapping = {
+            'string': str,
+            'integer': int,
+            'float': (int, float),
+            'boolean': bool,
+            'list': list,
+            'dict': dict
+        }
+        
+        expected_python_type = type_mapping.get(expected_type.lower())
+        if expected_python_type is None:
+            return True  # Unknown type, skip validation
+        
+        return isinstance(value, expected_python_type)
+    
+    def _load_to_database(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Load data to database with transaction support and bulk operations."""
+        from sqlalchemy import create_engine, text, MetaData, Table, inspect
+        from sqlalchemy.exc import SQLAlchemyError
+        import pandas as pd
+        
+        # Extract configuration
+        connection_string = config.get('connection_string')
+        table_name = config.get('table_name')
+        operation = config.get('operation', 'insert').lower()  # insert, upsert, replace
+        batch_size = config.get('batch_size', 1000)
+        create_table = config.get('create_table', False)
+        primary_key = config.get('primary_key', [])
+        
+        if not connection_string or not table_name:
+            return {
+                "status": "error",
+                "error_message": "Database connection_string and table_name are required"
+            }
+        
+        # Convert data to DataFrame for easier manipulation
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        elif isinstance(data, dict):
+            df = pd.DataFrame([data])
+        else:
+            return {
+                "status": "error",
+                "error_message": "Data must be a list of records or a single record"
+            }
+        
+        if df.empty:
+            return {
+                "status": "completed",
+                "records_loaded": 0,
+                "message": "No data to load"
+            }
+        
+        try:
+            # Create database engine
+            engine = create_engine(connection_string)
+            
+            with engine.begin() as conn:  # Use transaction
+                # Check if table exists
+                inspector = inspect(engine)
+                table_exists = inspector.has_table(table_name)
+                
+                if not table_exists and create_table:
+                    # Create table from DataFrame schema
+                    df.head(0).to_sql(table_name, conn, if_exists='fail', index=False)
+                    self.logger.info(f"Created table '{table_name}'")
+                elif not table_exists:
+                    return {
+                        "status": "error",
+                        "error_message": f"Table '{table_name}' does not exist. Set create_table=True to create it."
+                    }
+                
+                # Perform the loading operation
+                records_loaded = 0
+                
+                if operation == 'insert':
+                    # Simple insert operation
+                    df.to_sql(table_name, conn, if_exists='append', index=False, method='multi', chunksize=batch_size)
+                    records_loaded = len(df)
+                
+                elif operation == 'replace':
+                    # Replace all data in table
+                    df.to_sql(table_name, conn, if_exists='replace', index=False, method='multi', chunksize=batch_size)
+                    records_loaded = len(df)
+                
+                elif operation == 'upsert':
+                    # Upsert operation (insert or update)
+                    if not primary_key:
+                        return {
+                            "status": "error",
+                            "error_message": "primary_key must be specified for upsert operation"
+                        }
+                    
+                    records_loaded = self._perform_upsert(conn, df, table_name, primary_key, batch_size)
+                
+                else:
+                    return {
+                        "status": "error",
+                        "error_message": f"Unsupported operation: {operation}"
+                    }
+                
+                # Commit transaction automatically when exiting 'with' block
+                self.logger.info(f"Successfully loaded {records_loaded} records to {table_name}")
+                
+                return {
+                    "status": "completed",
+                    "records_loaded": records_loaded,
+                    "table_name": table_name,
+                    "operation": operation,
+                    "batch_size": batch_size
+                }
+        
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error during load: {e}")
+            return {
+                "status": "error",
+                "error_message": f"Database error: {str(e)}",
+                "error_type": "SQLAlchemyError"
+            }
+        except Exception as e:
+            self.logger.error(f"Unexpected error during load: {e}")
+            return {
+                "status": "error",
+                "error_message": f"Unexpected error: {str(e)}",
+                "error_type": type(e).__name__
+            }
+    
+    def _perform_upsert(self, conn, df: 'pd.DataFrame', table_name: str, primary_key: List[str], batch_size: int) -> int:
+        """Perform upsert operation (insert or update on conflict)."""
+        from sqlalchemy import text
+        
+        records_loaded = 0
+        columns = df.columns.tolist()
+        
+        # Generate upsert query based on database type
+        if 'postgresql' in str(conn.engine.url).lower():
+            # PostgreSQL ON CONFLICT syntax
+            pk_clause = ', '.join(primary_key)
+            update_clause = ', '.join([f"{col} = EXCLUDED.{col}" for col in columns if col not in primary_key])
+            
+            placeholders = ', '.join([f":{col}" for col in columns])
+            query = f"""
+                INSERT INTO {table_name} ({', '.join(columns)})
+                VALUES ({placeholders})
+                ON CONFLICT ({pk_clause})
+                DO UPDATE SET {update_clause}
+            """
+        
+        elif 'mysql' in str(conn.engine.url).lower():
+            # MySQL ON DUPLICATE KEY UPDATE syntax
+            update_clause = ', '.join([f"{col} = VALUES({col})" for col in columns if col not in primary_key])
+            placeholders = ', '.join([f":{col}" for col in columns])
+            
+            query = f"""
+                INSERT INTO {table_name} ({', '.join(columns)})
+                VALUES ({placeholders})
+                ON DUPLICATE KEY UPDATE {update_clause}
+            """
+        
+        else:
+            # SQLite or other databases - use REPLACE
+            placeholders = ', '.join([f":{col}" for col in columns])
+            query = f"""
+                REPLACE INTO {table_name} ({', '.join(columns)})
+                VALUES ({placeholders})
+            """
+        
+        # Execute upsert in batches
+        for i in range(0, len(df), batch_size):
+            batch = df.iloc[i:i+batch_size]
+            batch_records = batch.to_dict('records')
+            
+            for record in batch_records:
+                conn.execute(text(query), record)
+                records_loaded += 1
+        
+        return records_loaded
+    
+    def _load_to_file(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Load data to file (CSV, JSON, Parquet)."""
+        import pandas as pd
+        import json
+        from pathlib import Path
+        
+        file_path = config.get('file_path')
+        file_format = config.get('format', 'csv').lower()
+        
+        if not file_path:
+            return {
+                "status": "error",
+                "error_message": "file_path is required for file destination"
+            }
+        
+        # Convert data to DataFrame
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        elif isinstance(data, dict):
+            df = pd.DataFrame([data])
+        else:
+            return {
+                "status": "error",
+                "error_message": "Data must be a list of records or a single record"
+            }
+        
+        try:
+            # Ensure directory exists
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write based on format
+            if file_format == 'csv':
+                df.to_csv(file_path, index=False)
+            elif file_format == 'json':
+                df.to_json(file_path, orient='records', indent=2)
+            elif file_format == 'parquet':
+                df.to_parquet(file_path, index=False)
+            else:
+                return {
+                    "status": "error",
+                    "error_message": f"Unsupported file format: {file_format}"
+                }
+            
+            return {
+                "status": "completed",
+                "records_loaded": len(df),
+                "file_path": file_path,
+                "format": file_format
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "error_message": f"File write error: {str(e)}",
+                "error_type": type(e).__name__
+            }
+    
+    def _load_to_s3(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Load data to S3."""
+        import boto3
+        import json
+        import pandas as pd
+        from io import StringIO
+        
+        bucket = config.get('bucket')
+        key = config.get('key')
+        file_format = config.get('format', 'json').lower()
+        
+        if not bucket or not key:
+            return {
+                "status": "error",
+                "error_message": "bucket and key are required for S3 destination"
+            }
+        
+        # Convert data to appropriate format
+        try:
+            if file_format == 'json':
+                if isinstance(data, list):
+                    content = json.dumps(data, indent=2)
+                else:
+                    content = json.dumps([data] if data else [], indent=2)
+            elif file_format == 'csv':
+                df = pd.DataFrame(data if isinstance(data, list) else [data])
+                content = df.to_csv(index=False)
+            else:
+                return {
+                    "status": "error",
+                    "error_message": f"Unsupported S3 format: {file_format}"
+                }
+            
+            # Upload to S3
+            s3_client = boto3.client('s3')
+            s3_client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=content.encode('utf-8'),
+                ContentType='application/json' if file_format == 'json' else 'text/csv'
+            )
+            
+            record_count = len(data) if isinstance(data, list) else 1
+            
+            return {
+                "status": "completed",
+                "records_loaded": record_count,
+                "s3_location": f"s3://{bucket}/{key}",
+                "format": file_format
+            }
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "error_message": f"S3 upload error: {str(e)}",
+                "error_type": type(e).__name__
+            }
+    
+    def _load_to_api(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Load data to API endpoint."""
+        import aiohttp
+        import asyncio
+        import json
+        
+        url = config.get('url')
+        method = config.get('method', 'POST').upper()
+        headers = config.get('headers', {})
+        batch_size = config.get('batch_size', 100)
+        
+        if not url:
+            return {
+                "status": "error",
+                "error_message": "url is required for API destination"
+            }
+        
+        # Ensure data is a list
+        if not isinstance(data, list):
+            data = [data] if data else []
+        
+        try:
+            # Run async API loading
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self._load_to_api_async(data, url, method, headers, batch_size))
+            loop.close()
+            
+            return result
+        
+        except Exception as e:
+            return {
+                "status": "error",
+                "error_message": f"API load error: {str(e)}",
+                "error_type": type(e).__name__
+            }
+    
+    async def _load_to_api_async(self, data: List[Any], url: str, method: str, headers: Dict[str, str], batch_size: int) -> Dict[str, Any]:
+        """Async helper for API loading."""
+        import aiohttp
+        
+        headers.setdefault('Content-Type', 'application/json')
+        records_loaded = 0
+        errors = []
+        
+        async with aiohttp.ClientSession() as session:
+            # Process data in batches
+            for i in range(0, len(data), batch_size):
+                batch = data[i:i+batch_size]
+                
+                try:
+                    async with session.request(
+                        method, 
+                        url, 
+                        json=batch, 
+                        headers=headers
+                    ) as response:
+                        if 200 <= response.status < 300:
+                            records_loaded += len(batch)
+                        else:
+                            error_text = await response.text()
+                            errors.append(f"Batch {i//batch_size + 1}: HTTP {response.status} - {error_text}")
+                
+                except Exception as e:
+                    errors.append(f"Batch {i//batch_size + 1}: {str(e)}")
+        
+        return {
+            "status": "completed" if not errors else "partial_success",
+            "records_loaded": records_loaded,
+            "total_records": len(data),
+            "batch_size": batch_size,
+            "errors": errors if errors else None
+        }
 
 
 class MonitorAgent:
