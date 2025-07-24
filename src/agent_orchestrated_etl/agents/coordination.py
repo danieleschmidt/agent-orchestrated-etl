@@ -120,8 +120,17 @@ class AgentCoordinator:
             "total_coordination_time": 0.0,
         }
         
+        # Enhanced agent selection capabilities (ETL-013)
+        self.selection_audit_trail = []
+        self.load_balancing_metrics = {
+            "agent_loads": {},
+            "load_distribution": [],
+            "balancing_effectiveness": 0.0,
+            "last_updated": time.time()
+        }
+        
         self.logger = get_logger("agent.coordination")
-        self.logger.info("Agent coordinator initialized")
+        self.logger.info("Agent coordinator initialized with enhanced selection capabilities")
     
     async def register_agent(self, agent: BaseAgent) -> None:
         """Register an agent for coordination."""
@@ -478,6 +487,252 @@ class AgentCoordinator:
         total_compatible = compatible_inputs + compatible_outputs
         
         return (total_compatible / total_required * 0.2) if total_required > 0 else 0.0  # Up to 20% bonus
+    
+    # Enhanced agent selection methods for ETL-013
+    
+    def _get_enhanced_capabilities(self, task: CoordinationTask) -> List[str]:
+        """Enhanced capability inference from task context."""
+        required_capabilities = self._get_required_capabilities(task)
+        
+        # Add intelligent capability inference
+        task_data = task.task_data
+        
+        # Infer from volume and complexity
+        if task_data.get("volume") == "large":
+            required_capabilities.extend(["high_throughput", "memory_optimization"])
+        
+        if task_data.get("complexity") == "high":
+            required_capabilities.extend(["advanced_algorithms", "error_handling"])
+        
+        # Infer from real-time requirements
+        if task_data.get("real_time"):
+            required_capabilities.extend(["real_time_processing", "low_latency"])
+        
+        # Infer database-specific optimizations
+        if "postgresql" in str(task_data.get("data_source", "")).lower():
+            required_capabilities.extend(["postgresql_optimization", "database_optimization"])
+        
+        # Infer format-specific processing
+        data_format = task_data.get("data_format", "").lower()
+        if data_format == "json":
+            required_capabilities.extend(["json_processing", "schema_validation"])
+        
+        return list(set(required_capabilities))
+    
+    def _calculate_performance_score(self, agent: 'BaseAgent', task: CoordinationTask) -> float:
+        """Calculate performance-based score for agent selection."""
+        try:
+            metrics = agent.get_performance_metrics()
+            
+            # Extract performance requirements from task
+            task_requirements = task.task_data.get("performance_requirement", "standard")
+            
+            # Weight different metrics based on task requirements
+            if task_requirements == "high":
+                # Prioritize speed and reliability for high-performance tasks
+                score = (
+                    metrics.get("success_rate", 0.5) * 0.4 +
+                    (1.0 - min(metrics.get("avg_execution_time", 1000) / 1000, 1.0)) * 0.3 +
+                    metrics.get("availability", 0.5) * 0.2 +
+                    min(metrics.get("throughput", 0) / 1000, 1.0) * 0.1
+                )
+            else:
+                # Standard weighting for normal tasks
+                score = (
+                    metrics.get("success_rate", 0.5) * 0.5 +
+                    metrics.get("availability", 0.5) * 0.3 +
+                    (1.0 - metrics.get("error_rate", 0.5)) * 0.2
+                )
+            
+            return min(score, 1.0)
+            
+        except Exception as e:
+            self.logger.warning(f"Could not calculate performance score for agent: {e}")
+            return 0.5  # Default neutral score
+    
+    def _find_fallback_agent(self, task: CoordinationTask) -> Dict[str, Any]:
+        """Find fallback agent when no exact capability match exists."""
+        required_capabilities = self._get_enhanced_capabilities(task)
+        
+        best_partial_match = None
+        best_match_score = 0.0
+        
+        for agent_id, agent in self.registered_agents.items():
+            agent_capabilities = {cap.name for cap in agent.get_capabilities()}
+            
+            # Calculate partial match score
+            matches = len(set(required_capabilities) & agent_capabilities)
+            partial_score = matches / len(required_capabilities) if required_capabilities else 0
+            
+            if partial_score > best_match_score:
+                best_match_score = partial_score
+                best_partial_match = agent_id
+        
+        if best_partial_match and best_match_score >= 0.3:  # At least 30% capability match
+            missing_capabilities = set(required_capabilities) - {cap.name for cap in self.registered_agents[best_partial_match].get_capabilities()}
+            
+            return {
+                "strategy": "partial_match",
+                "recommended_agent": best_partial_match,
+                "match_score": best_match_score,
+                "capability_gap": list(missing_capabilities),
+                "mitigation_steps": [
+                    f"Agent lacks {len(missing_capabilities)} required capabilities",
+                    "Consider task decomposition or capability enhancement",
+                    "Monitor execution closely for potential issues"
+                ]
+            }
+        else:
+            # No suitable agent found - suggest decomposition
+            return {
+                "strategy": "decompose",
+                "recommended_agent": None,
+                "capability_gap": required_capabilities,
+                "mitigation_steps": [
+                    "Break task into smaller components",
+                    "Assign each component to specialized agents",
+                    "Use workflow orchestration for coordination"
+                ]
+            }
+    
+    async def _find_suitable_agent_with_audit(self, task: CoordinationTask, workflow_def: Optional[WorkflowDefinition]) -> Optional[str]:
+        """Find suitable agent with comprehensive audit trail."""
+        start_time = time.time()
+        
+        # Get all potential agents
+        candidates = []
+        selection_criteria = {
+            "required_capabilities": self._get_enhanced_capabilities(task),
+            "performance_requirements": task.task_data.get("performance_requirement", "standard"),
+            "load_balancing": True
+        }
+        
+        for agent_id, agent in self.registered_agents.items():
+            if not workflow_def or agent_id in workflow_def.agents:
+                # Calculate comprehensive score
+                capability_score = self._calculate_agent_score(agent, selection_criteria["required_capabilities"], task)
+                performance_score = self._calculate_performance_score(agent, task)
+                load_factor = agent.get_current_load()
+                specialization_score = agent.get_specialization_score(task.task_type)
+                
+                # Combined score with load balancing
+                combined_score = (
+                    capability_score * 0.4 +
+                    performance_score * 0.3 +
+                    specialization_score * 0.2 +
+                    (1.0 - load_factor) * 0.1  # Prefer less loaded agents
+                )
+                
+                if combined_score > 0:
+                    candidates.append({
+                        "agent_id": agent_id,
+                        "combined_score": combined_score,
+                        "capability_score": capability_score,
+                        "performance_score": performance_score,
+                        "load_factor": load_factor,
+                        "specialization_score": specialization_score
+                    })
+        
+        # Sort by combined score
+        candidates.sort(key=lambda x: x["combined_score"], reverse=True)
+        
+        # Select best candidate
+        selected_agent = candidates[0]["agent_id"] if candidates else None
+        
+        # Create audit trail entry
+        selection_time = time.time() - start_time
+        audit_entry = {
+            "task_id": task.task_id,
+            "selected_agent": selected_agent,
+            "selection_score": candidates[0]["combined_score"] if candidates else 0.0,
+            "alternatives_considered": len(candidates),
+            "selection_criteria": selection_criteria,
+            "candidates": candidates[:5],  # Top 5 candidates
+            "timestamp": time.time(),
+            "selection_time_ms": round(selection_time * 1000, 2)
+        }
+        
+        self.selection_audit_trail.append(audit_entry)
+        
+        # Keep only last 1000 entries
+        if len(self.selection_audit_trail) > 1000:
+            self.selection_audit_trail = self.selection_audit_trail[-1000:]
+        
+        return selected_agent
+    
+    def _find_suitable_agent_with_load_balancing(self, task: CoordinationTask, workflow_def: Optional[WorkflowDefinition]) -> Optional[str]:
+        """Find suitable agent with load balancing optimization."""
+        required_capabilities = self._get_enhanced_capabilities(task)
+        
+        # Get capable agents
+        capable_agents = []
+        for agent_id, agent in self.registered_agents.items():
+            if not workflow_def or agent_id in workflow_def.agents:
+                capability_score = self._calculate_agent_score(agent, required_capabilities, task)
+                if capability_score >= 0.5:  # Minimum capability threshold
+                    current_load = agent.get_current_load()
+                    capable_agents.append({
+                        "agent_id": agent_id,
+                        "capability_score": capability_score,
+                        "current_load": current_load,
+                        "load_adjusted_score": capability_score * (1.0 - current_load)
+                    })
+        
+        if not capable_agents:
+            return None
+        
+        # Sort by load-adjusted score
+        capable_agents.sort(key=lambda x: x["load_adjusted_score"], reverse=True)
+        
+        # Update load balancing metrics
+        agent_loads = {agent["agent_id"]: agent["current_load"] for agent in capable_agents}
+        self.load_balancing_metrics["agent_loads"] = agent_loads
+        self.load_balancing_metrics["load_distribution"].append({
+            "timestamp": time.time(),
+            "loads": agent_loads.copy()
+        })
+        
+        # Calculate balancing effectiveness
+        loads = list(agent_loads.values())
+        if loads:
+            load_variance = sum((load - sum(loads)/len(loads))**2 for load in loads) / len(loads)
+            self.load_balancing_metrics["balancing_effectiveness"] = max(0.0, 1.0 - load_variance)
+        
+        self.load_balancing_metrics["last_updated"] = time.time()
+        
+        # Keep only last 100 load distribution entries
+        if len(self.load_balancing_metrics["load_distribution"]) > 100:
+            self.load_balancing_metrics["load_distribution"] = self.load_balancing_metrics["load_distribution"][-100:]
+        
+        return capable_agents[0]["agent_id"]
+    
+    def _calculate_specialization_match(self, agent: 'BaseAgent', task: CoordinationTask) -> float:
+        """Calculate how well agent specialization matches task requirements."""
+        # Get specialization score from agent
+        specialization_score = agent.get_specialization_score(task.task_type)
+        
+        # Factor in task complexity and requirements
+        task_complexity = task.task_data.get("complexity", "medium")
+        complexity_multiplier = {
+            "low": 0.8,
+            "medium": 1.0,
+            "high": 1.2
+        }.get(task_complexity, 1.0)
+        
+        # Adjust for data source specialization
+        data_source = task.task_data.get("data_source", "")
+        if hasattr(agent, 'specialization') and agent.specialization in data_source:
+            specialization_score *= 1.1  # 10% bonus for data source match
+        
+        return min(specialization_score * complexity_multiplier, 1.0)
+    
+    def get_selection_audit_trail(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent agent selection audit trail."""
+        return self.selection_audit_trail[-limit:]
+    
+    def get_load_balancing_metrics(self) -> Dict[str, Any]:
+        """Get current load balancing metrics."""
+        return self.load_balancing_metrics.copy()
     
     # Coordination pattern implementations
     
