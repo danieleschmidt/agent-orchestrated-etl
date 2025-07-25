@@ -200,7 +200,7 @@ class PipelineMonitor:
         # Collect status change metric
         if self.realtime_monitor:
             self.realtime_monitor.collect_pipeline_metric(
-                f"pipeline.status_change", 1.0, pipeline_id, 
+                "pipeline.status_change", 1.0, pipeline_id, 
                 metadata={"from_status": old_status.value, "to_status": status.value}
             )
         

@@ -8,9 +8,12 @@ import statistics
 import csv
 import os
 import psutil
+import asyncio
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
 import re
+import aiohttp
 
 from langchain_core.language_models.base import BaseLanguageModel
 
@@ -579,8 +582,6 @@ Respond with structured data when appropriate, including metrics and status info
     
     async def _load_real_sample_data(self, data_source_config: Dict[str, Any], config: ProfilingConfig) -> Dict[str, Any]:
         """Load real sample data from actual data sources using intelligent sampling strategies."""
-        import random
-        import statistics
         
         source_type = data_source_config.get('type', '').lower()
         sampling_strategy = data_source_config.get('sampling_strategy', config.sampling_strategy or 'random')
@@ -600,7 +601,6 @@ Respond with structured data when appropriate, including metrics and status info
     async def _sample_database_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
         """Sample data from database using various sampling strategies."""
         from sqlalchemy import create_engine, text
-        import pandas as pd
         
         connection_string = config.get('connection_string')
         table_name = config.get('table_name')
@@ -712,9 +712,6 @@ Respond with structured data when appropriate, including metrics and status info
     
     async def _sample_file_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
         """Sample data from files using various sampling strategies."""
-        import csv
-        import json
-        import random
         
         file_path = config.get('file_path')
         file_format = config.get('file_format', 'csv').lower()
@@ -974,8 +971,6 @@ Respond with structured data when appropriate, including metrics and status info
     async def _sample_s3_data(self, config: Dict[str, Any], strategy: str, sample_size: int) -> Dict[str, Any]:
         """Sample data from S3 objects."""
         import boto3
-        import io
-        import random
         
         bucket_name = config.get('bucket_name')
         prefix = config.get('prefix', '')
@@ -1668,7 +1663,6 @@ Otherwise, explain what additional information or resources would be needed."""
         """Extract data from database sources."""
         import time
         from sqlalchemy import create_engine, text
-        import pandas as pd
         
         start_time = time.time()
         
@@ -2017,11 +2011,7 @@ Otherwise, explain what additional information or resources would be needed."""
     
     async def _extract_from_api(self, source_config: Dict[str, Any]) -> Dict[str, Any]:
         """Extract data from API sources with comprehensive support for REST, GraphQL, and SOAP."""
-        import aiohttp
-        import asyncio
         import time
-        from urllib.parse import urljoin, urlparse
-        import xml.etree.ElementTree as ET
         
         start_time = time.time()
         

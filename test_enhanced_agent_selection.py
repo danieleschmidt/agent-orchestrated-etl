@@ -6,7 +6,7 @@ RED phase of TDD cycle
 
 import sys
 import time
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 # Mock dependencies
 class MockYAML:

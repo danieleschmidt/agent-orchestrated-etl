@@ -4,7 +4,6 @@ GREEN PHASE: Tests for ETL-015 Architecture Documentation Implementation
 This test script validates that comprehensive architecture documentation has been successfully implemented.
 """
 
-import os
 import re
 from pathlib import Path
 

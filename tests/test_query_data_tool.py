@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import sqlite3
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 from src.agent_orchestrated_etl.agents.tools import QueryDataTool, ToolException
 

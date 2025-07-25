@@ -33,6 +33,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_workflow_routing_batch",
             task_type="create_workflow",
+            description="Test routing workflow for batch processing target",
             inputs={
                 "requirements": {
                     "data_source": "s3://bucket/batch-data/",
@@ -64,6 +65,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_workflow_routing_streaming",
             task_type="create_workflow",
+            description="Test routing workflow for streaming processing target",
             inputs={
                 "requirements": {
                     "data_source": "kafka://topic/streaming-events",
@@ -94,6 +96,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_workflow_routing_dwh",
             task_type="create_workflow",
+            description="Test routing workflow for data warehouse target",
             inputs={
                 "requirements": {
                     "data_source": "postgres://db/transactional",
@@ -124,6 +127,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_workflow_routing_ml",
             task_type="create_workflow",
+            description="Test routing workflow for machine learning target",
             inputs={
                 "requirements": {
                     "data_source": "s3://bucket/training-data/",
@@ -154,6 +158,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_workflow_routing_lake",
             task_type="create_workflow",
+            description="Test routing workflow for data lake target",
             inputs={
                 "requirements": {
                     "data_source": "mixed://sources/raw-data/",
@@ -184,6 +189,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_workflow_routing_default",
             task_type="create_workflow",
+            description="Test routing workflow with default target",
             inputs={
                 "requirements": {
                     "data_source": "file://local/data.csv"
@@ -211,6 +217,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_conditional_routing",
             task_type="create_workflow",
+            description="Test conditional routing based on data volume",
             inputs={
                 "requirements": {
                     "data_source": "s3://bucket/large-dataset/",
@@ -239,6 +246,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_custom_routing",
             task_type="create_workflow",
+            description="Test routing with custom parameters",
             inputs={
                 "requirements": {
                     "data_source": "api://service/data",
@@ -277,6 +285,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_routing_audit",
             task_type="create_workflow",
+            description="Test routing decision audit trail",
             inputs={
                 "requirements": {
                     "data_source": "kafka://stream/events",
@@ -311,6 +320,7 @@ class TestWorkflowRouting:
         task = AgentTask(
             task_id="test_routing_failure",
             task_type="create_workflow",
+            description="Test routing failure handling",
             inputs={
                 "requirements": {
                     "data_source": "file://data.txt",

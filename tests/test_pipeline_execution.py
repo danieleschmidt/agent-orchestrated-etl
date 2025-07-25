@@ -1,8 +1,6 @@
 """Test real pipeline execution functionality."""
 
-import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from src.agent_orchestrated_etl.agents.tools import ExecutePipelineTool
 from src.agent_orchestrated_etl.exceptions import ToolException
 
