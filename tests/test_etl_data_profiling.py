@@ -1,8 +1,7 @@
 """Tests for ETL Agent advanced data profiling capabilities."""
 
 import pytest
-import statistics
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from src.agent_orchestrated_etl.agents.etl_agent import (
     ETLAgent, 

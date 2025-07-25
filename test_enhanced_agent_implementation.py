@@ -6,7 +6,6 @@ GREEN phase validation
 
 import sys
 import time
-from unittest.mock import Mock, MagicMock
 
 # Mock dependencies to avoid import issues
 class MockYAML:

@@ -2,8 +2,7 @@
 
 import pytest
 import time
-import uuid
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from src.agent_orchestrated_etl.agents.memory import (
     AgentMemory,

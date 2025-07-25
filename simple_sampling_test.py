@@ -4,7 +4,6 @@
 import sqlite3
 import tempfile
 import os
-import sys
 
 def test_database_sampling_direct():
     """Test database sampling directly with minimal dependencies."""

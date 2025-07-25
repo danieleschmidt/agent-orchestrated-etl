@@ -15,8 +15,6 @@ from .memory import AgentMemory, MemoryType, MemoryImportance
 from .tools import AgentToolRegistry, get_tool_registry
 from ..exceptions import AgentException, NetworkException, ExternalServiceException, RateLimitException
 from ..logging_config import LogContext
-from ..retry import RetryConfig, retry, RetryConfigs
-from ..circuit_breaker import CircuitBreakerConfig, circuit_breaker, CircuitBreakerConfigs
 
 
 class OrchestratorAgent(BaseAgent):
@@ -663,7 +661,7 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
         # Store failure information in memory for learning
         await self.memory.store_entry(
             content=f"Step failure: {step_name} failed with {type(error).__name__}: {error}",
-            entry_type=MemoryType.OBSERVATION,
+            entry_type=MemoryType.EPISODIC,
             importance=MemoryImportance.HIGH,
             metadata={
                 "workflow_id": workflow_id,
@@ -1079,7 +1077,7 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
         # Store routing decision in memory for learning
         await self.memory.store_entry(
             content=f"Workflow routing: {workflow_type} selected for target '{target}' with strategy '{routing_strategy}'",
-            entry_type=MemoryType.OBSERVATION,
+            entry_type=MemoryType.EPISODIC,
             importance=MemoryImportance.MEDIUM,
             metadata={
                 "workflow_type": workflow_type,

@@ -7,7 +7,6 @@ GREEN phase validation
 import tempfile
 import sqlite3
 import os
-import sys
 import time
 
 def test_query_data_tool_implementation():

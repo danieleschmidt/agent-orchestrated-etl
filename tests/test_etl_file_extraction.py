@@ -6,11 +6,8 @@ import json
 import csv
 import os
 import pandas as pd
-from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
 
 from agent_orchestrated_etl.agents.etl_agent import ETLAgent
-from agent_orchestrated_etl.agents.base_agent import AgentTask
 
 
 class TestETLFileExtraction:

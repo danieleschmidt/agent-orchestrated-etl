@@ -23,7 +23,6 @@ from .logging_config import get_logger, TimedOperation, LogContext
 def load_data(data: Any, destination_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Load data to configured destination with comprehensive features."""
     import time
-    from typing import Union
     
     start_time = time.time()
     
@@ -153,7 +152,7 @@ class DataLoader:
     
     def _load_to_database(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to database with transaction support and bulk operations."""
-        from sqlalchemy import create_engine, text, MetaData, Table, inspect
+        from sqlalchemy import create_engine, inspect
         from sqlalchemy.exc import SQLAlchemyError
         import pandas as pd
         
@@ -263,7 +262,7 @@ class DataLoader:
                 "error_type": type(e).__name__
             }
     
-    def _perform_upsert(self, conn, df: 'pd.DataFrame', table_name: str, primary_key: List[str], batch_size: int) -> int:
+    def _perform_upsert(self, conn, df: 'pandas.DataFrame', table_name: str, primary_key: List[str], batch_size: int) -> int:
         """Perform upsert operation (insert or update on conflict)."""
         from sqlalchemy import text
         
@@ -317,7 +316,6 @@ class DataLoader:
     def _load_to_file(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to file (CSV, JSON, Parquet)."""
         import pandas as pd
-        import json
         from pathlib import Path
         
         file_path = config.get('file_path')
@@ -376,7 +374,6 @@ class DataLoader:
         import boto3
         import json
         import pandas as pd
-        from io import StringIO
         
         bucket = config.get('bucket')
         key = config.get('key')
@@ -431,9 +428,7 @@ class DataLoader:
     
     def _load_to_api(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to API endpoint."""
-        import aiohttp
         import asyncio
-        import json
         
         url = config.get('url')
         method = config.get('method', 'POST').upper()

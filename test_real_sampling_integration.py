@@ -21,7 +21,7 @@ sys.path.append('src')
 
 def create_test_agent():
     """Create a test ETL agent with minimal setup."""
-    from src.agent_orchestrated_etl.agents.etl_agent import ETLAgent, ProfilingConfig
+    from src.agent_orchestrated_etl.agents.etl_agent import ETLAgent
     from src.agent_orchestrated_etl.agents.base_agent import AgentConfig, AgentRole
     
     config = AgentConfig(name="TestETL", role=AgentRole.ETL_SPECIALIST)

@@ -4,7 +4,6 @@ RED PHASE: Tests for ETL-015 Architecture Documentation
 This test script validates that comprehensive architecture documentation exists.
 """
 
-import os
 import re
 from pathlib import Path
 

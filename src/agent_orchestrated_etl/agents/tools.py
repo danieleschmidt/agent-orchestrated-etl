@@ -195,12 +195,7 @@ class ExecutePipelineTool(ETLTool):
     
     def _execute(self, dag_config: Dict[str, Any], execution_mode: str = "async", monitor_progress: bool = True, timeout_seconds: int = 3600) -> Dict[str, Any]:
         """Execute ETL pipeline with comprehensive orchestration."""
-        import asyncio
-        import psutil
-        import threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        from typing import Set
-        from ..orchestrator import DataOrchestrator, MonitorAgent
+        from ..orchestrator import MonitorAgent
         from ..dag_generator import SimpleDAG
         
         try:
@@ -285,7 +280,7 @@ class ExecutePipelineTool(ETLTool):
     def _execute_sync(self, dag, task_dependencies, tasks_config, execution_state, monitor, timeout_seconds):
         """Execute pipeline synchronously with proper dependency resolution."""
         import psutil
-        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError
         from typing import Set
         
         # Get execution order
@@ -634,10 +629,7 @@ class QueryDataTool(ETLTool):
     def _execute(self, data_source: str, query: str, limit: int = 100, format: str = "json", 
                 use_cache: bool = True, security_level: str = "standard") -> Dict[str, Any]:
         """Execute data query with comprehensive features."""
-        import hashlib
         import uuid
-        from sqlalchemy import create_engine, text
-        import pandas as pd
         
         start_time = time.time()
         query_id = str(uuid.uuid4())[:8]
@@ -712,7 +704,6 @@ class QueryDataTool(ETLTool):
     def _execute_sql_query(self, data_source: str, query: str, limit: int) -> Dict[str, Any]:
         """Execute SQL query against the data source."""
         from sqlalchemy import create_engine, text
-        import pandas as pd
         
         try:
             # Create database engine
@@ -851,11 +842,12 @@ class QueryDataTool(ETLTool):
     def _get_query_plan(self, conn, query: str) -> str:
         """Get query execution plan if supported."""
         try:
+            from sqlalchemy import text
             # Try to get query plan (SQLite syntax)
             plan_result = conn.execute(text(f"EXPLAIN QUERY PLAN {query}"))
             plan_rows = plan_result.fetchall()
             return "\n".join([str(row) for row in plan_rows])
-        except:
+        except Exception:
             return "Query plan not available"
     
     def _generate_cache_key(self, data_source: str, query: str, limit: int) -> str:

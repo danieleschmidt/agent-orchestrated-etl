@@ -1,9 +1,8 @@
 """Test enhanced monitor agent functionality."""
 
-import asyncio
 import time
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from src.agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
 from src.agent_orchestrated_etl.agents.base_agent import AgentConfig, AgentRole

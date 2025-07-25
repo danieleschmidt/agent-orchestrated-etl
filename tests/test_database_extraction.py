@@ -3,10 +3,6 @@ import pytest
 import sqlite3
 import tempfile
 import os
-from unittest.mock import Mock, patch, AsyncMock
-from sqlalchemy import create_engine, text
-from sqlalchemy.pool import StaticPool
-import pandas as pd
 
 from agent_orchestrated_etl.agents.etl_agent import ETLAgent
 from agent_orchestrated_etl.agents.base_agent import AgentConfig

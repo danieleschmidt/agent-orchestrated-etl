@@ -1,9 +1,8 @@
 """Test sophisticated recovery strategies in orchestrator agent."""
 
-import asyncio
 import time
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 from src.agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
 from src.agent_orchestrated_etl.agents.base_agent import AgentConfig, AgentRole

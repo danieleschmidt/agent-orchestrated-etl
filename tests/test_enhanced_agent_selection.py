@@ -2,7 +2,7 @@
 
 import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from src.agent_orchestrated_etl.agents.base_agent import AgentCapability, BaseAgent, AgentConfig, AgentRole
 from src.agent_orchestrated_etl.agents.coordination import AgentCoordinator, CoordinationTask

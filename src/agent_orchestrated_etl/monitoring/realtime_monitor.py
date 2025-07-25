@@ -5,13 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-import threading
 from typing import Any, Dict, List, Optional, Set, Callable
-from datetime import datetime, timedelta
 from collections import defaultdict, deque
 import sqlite3
 import psutil
-import os
 
 from ..logging_config import get_logger
 from ..exceptions import MonitoringException
