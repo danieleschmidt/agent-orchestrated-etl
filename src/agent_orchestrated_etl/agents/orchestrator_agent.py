@@ -659,17 +659,17 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
         )
         
         # Store failure information in memory for learning
-        await self.memory.store_entry(
-            content=f"Step failure: {step_name} failed with {type(error).__name__}: {error}",
-            entry_type=MemoryType.EPISODIC,
-            importance=MemoryImportance.HIGH,
-            metadata={
+        self.memory.store_memory(
+            content={
+                "message": f"Step failure: {step_name} failed with {type(error).__name__}: {error}",
                 "workflow_id": workflow_id,
                 "step_name": step_name,
                 "error_type": type(error).__name__,
                 "recovery_strategy": recovery_strategy["strategy"],
                 "attempt_number": failure_record["attempt_number"]
-            }
+            },
+            memory_type=MemoryType.EPISODIC,
+            importance=MemoryImportance.HIGH
         )
         
         return recovery_strategy
@@ -1075,17 +1075,17 @@ If this is a task you can complete directly, provide the solution. Otherwise, ex
         }
         
         # Store routing decision in memory for learning
-        await self.memory.store_entry(
-            content=f"Workflow routing: {workflow_type} selected for target '{target}' with strategy '{routing_strategy}'",
-            entry_type=MemoryType.EPISODIC,
-            importance=MemoryImportance.MEDIUM,
-            metadata={
+        self.memory.store_memory(
+            content={
+                "message": f"Workflow routing: {workflow_type} selected for target '{target}' with strategy '{routing_strategy}'",
                 "workflow_type": workflow_type,
                 "target": target,
                 "routing_strategy": routing_strategy,
                 "data_volume": analysis_result.get("volume", "unknown"),
                 "decision_timestamp": routing_timestamp
-            }
+            },
+            memory_type=MemoryType.EPISODIC,
+            importance=MemoryImportance.MEDIUM
         )
         
         return {

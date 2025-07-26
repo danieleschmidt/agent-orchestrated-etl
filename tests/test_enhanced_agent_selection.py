@@ -64,8 +64,7 @@ class TestEnhancedBaseAgent:
         return AgentConfig(
             name="TestAgent",
             role=AgentRole.ETL_SPECIALIST,
-            agent_id="test_agent_001",
-            specialization="database"
+            agent_id="test_agent_001"
         )
     
     @pytest.fixture
