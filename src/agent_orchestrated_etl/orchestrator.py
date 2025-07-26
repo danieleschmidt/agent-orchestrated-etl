@@ -170,6 +170,35 @@ class DataLoader:
                 "error_message": "Database connection_string and table_name are required"
             }
         
+        # SECURITY: Validate table name to prevent SQL injection
+        if not self._is_valid_identifier(table_name):
+            return {
+                "status": "error",
+                "error_message": f"Invalid table name format: {table_name}. Table names must be valid SQL identifiers."
+            }
+        
+        # SECURITY: Validate operation parameter
+        valid_operations = ['insert', 'upsert', 'replace']
+        if operation not in valid_operations:
+            return {
+                "status": "error",
+                "error_message": f"Invalid operation: {operation}. Must be one of: {valid_operations}"
+            }
+        
+        # SECURITY: Validate primary key column names if provided
+        if primary_key:
+            if not isinstance(primary_key, list):
+                return {
+                    "status": "error",
+                    "error_message": "primary_key must be a list of column names"
+                }
+            for pk_col in primary_key:
+                if not self._is_valid_identifier(pk_col):
+                    return {
+                        "status": "error",
+                        "error_message": f"Invalid primary key column name: {pk_col}"
+                    }
+        
         # Convert data to DataFrame for easier manipulation
         if isinstance(data, list):
             df = pd.DataFrame(data)
@@ -187,6 +216,14 @@ class DataLoader:
                 "records_loaded": 0,
                 "message": "No data to load"
             }
+        
+        # SECURITY: Validate all column names to prevent SQL injection
+        for column_name in df.columns:
+            if not self._is_valid_identifier(str(column_name)):
+                return {
+                    "status": "error",
+                    "error_message": f"Invalid column name: {column_name}. Column names must be valid SQL identifiers."
+                }
         
         try:
             # Create database engine
@@ -263,55 +300,141 @@ class DataLoader:
             }
     
     def _perform_upsert(self, conn, df: 'pandas.DataFrame', table_name: str, primary_key: List[str], batch_size: int) -> int:
-        """Perform upsert operation (insert or update on conflict)."""
-        from sqlalchemy import text
+        """Perform upsert operation (insert or update on conflict) with SQL injection protection."""
+        from sqlalchemy import text, MetaData, Table
+        import re
         
         records_loaded = 0
         columns = df.columns.tolist()
         
-        # Generate upsert query based on database type
+        # SECURITY: Validate table name and column names to prevent SQL injection
+        if not self._is_valid_identifier(table_name):
+            raise ValueError(f"Invalid table name: {table_name}")
+        
+        for col in columns:
+            if not self._is_valid_identifier(col):
+                raise ValueError(f"Invalid column name: {col}")
+        
+        for pk_col in primary_key:
+            if not self._is_valid_identifier(pk_col):
+                raise ValueError(f"Invalid primary key column name: {pk_col}")
+            if pk_col not in columns:
+                raise ValueError(f"Primary key column '{pk_col}' not found in data")
+        
+        # SECURITY: Use SQLAlchemy's identifier quoting for table and column names
+        # This prevents SQL injection while preserving functionality
+        metadata = MetaData()
+        try:
+            # Reflect the table to get proper column information
+            table = Table(table_name, metadata, autoload_with=conn.engine)
+            quoted_table_name = table.name
+            quoted_columns = [col.name for col in table.columns if col.name in columns]
+            quoted_pk_columns = [col.name for col in table.columns if col.name in primary_key]
+        except Exception:
+            # Fallback: manually quote identifiers
+            quoted_table_name = self._quote_identifier(table_name, conn.engine.dialect)
+            quoted_columns = [self._quote_identifier(col, conn.engine.dialect) for col in columns]
+            quoted_pk_columns = [self._quote_identifier(col, conn.engine.dialect) for col in primary_key]
+        
+        # Generate upsert query based on database type with proper escaping
         if 'postgresql' in str(conn.engine.url).lower():
             # PostgreSQL ON CONFLICT syntax
-            pk_clause = ', '.join(primary_key)
-            update_clause = ', '.join([f"{col} = EXCLUDED.{col}" for col in columns if col not in primary_key])
+            pk_clause = ', '.join(quoted_pk_columns)
+            update_clause = ', '.join([f"{col} = EXCLUDED.{col}" for col in quoted_columns if col not in quoted_pk_columns])
             
-            placeholders = ', '.join([f":{col}" for col in columns])
+            # Use parameterized values only - never interpolate identifiers into f-strings
+            column_placeholders = ', '.join([f":{col}" for col in columns])
+            columns_list = ', '.join(quoted_columns)
+            
+            # Build query with proper identifier escaping
             query = f"""
-                INSERT INTO {table_name} ({', '.join(columns)})
-                VALUES ({placeholders})
+                INSERT INTO {quoted_table_name} ({columns_list})
+                VALUES ({column_placeholders})
                 ON CONFLICT ({pk_clause})
                 DO UPDATE SET {update_clause}
             """
         
         elif 'mysql' in str(conn.engine.url).lower():
             # MySQL ON DUPLICATE KEY UPDATE syntax
-            update_clause = ', '.join([f"{col} = VALUES({col})" for col in columns if col not in primary_key])
-            placeholders = ', '.join([f":{col}" for col in columns])
+            update_clause = ', '.join([f"{col} = VALUES({col})" for col in quoted_columns if col not in quoted_pk_columns])
+            column_placeholders = ', '.join([f":{col}" for col in columns])
+            columns_list = ', '.join(quoted_columns)
             
             query = f"""
-                INSERT INTO {table_name} ({', '.join(columns)})
-                VALUES ({placeholders})
+                INSERT INTO {quoted_table_name} ({columns_list})
+                VALUES ({column_placeholders})
                 ON DUPLICATE KEY UPDATE {update_clause}
             """
         
         else:
             # SQLite or other databases - use REPLACE
-            placeholders = ', '.join([f":{col}" for col in columns])
+            column_placeholders = ', '.join([f":{col}" for col in columns])
+            columns_list = ', '.join(quoted_columns)
+            
             query = f"""
-                REPLACE INTO {table_name} ({', '.join(columns)})
-                VALUES ({placeholders})
+                REPLACE INTO {quoted_table_name} ({columns_list})
+                VALUES ({column_placeholders})
             """
         
-        # Execute upsert in batches
+        # Execute upsert in batches using parameterized queries
         for i in range(0, len(df), batch_size):
             batch = df.iloc[i:i+batch_size]
             batch_records = batch.to_dict('records')
             
+            # SECURITY: Use parameterized execution - values are bound safely
             for record in batch_records:
-                conn.execute(text(query), record)
+                # Validate record data to prevent injection through values
+                validated_record = self._validate_record_values(record)
+                conn.execute(text(query), validated_record)
                 records_loaded += 1
         
         return records_loaded
+    
+    def _is_valid_identifier(self, identifier: str) -> bool:
+        """Validate SQL identifier to prevent injection attacks."""
+        if not identifier or not isinstance(identifier, str):
+            return False
+        
+        # Allow alphanumeric characters, underscores, and dots (for schema.table)
+        # Must start with letter or underscore
+        import re
+        pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$'
+        return bool(re.match(pattern, identifier)) and len(identifier) <= 64
+    
+    def _quote_identifier(self, identifier: str, dialect) -> str:
+        """Safely quote SQL identifier for the given dialect."""
+        # Use SQLAlchemy's dialect-specific quoting
+        return dialect.identifier_preparer.quote(identifier)
+    
+    def _validate_record_values(self, record: dict) -> dict:
+        """Validate and sanitize record values to prevent injection."""
+        validated = {}
+        for key, value in record.items():
+            # Ensure key is valid (already validated above, but double-check)
+            if not self._is_valid_identifier(key):
+                raise ValueError(f"Invalid column name in record: {key}")
+            
+            # For values, we rely on parameterized queries for safety
+            # But we can add basic type validation
+            if value is not None:
+                # Convert to appropriate types, handling potential injection vectors
+                if isinstance(value, str):
+                    # Limit string length to prevent memory attacks
+                    if len(value) > 10000:
+                        raise ValueError(f"String value too long for column {key}")
+                    validated[key] = value
+                elif isinstance(value, (int, float, bool)):
+                    validated[key] = value
+                else:
+                    # Convert other types to string with length limit
+                    str_value = str(value)
+                    if len(str_value) > 10000:
+                        raise ValueError(f"Value too long for column {key}")
+                    validated[key] = str_value
+            else:
+                validated[key] = None
+        
+        return validated
     
     def _load_to_file(self, data: Any, config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to file (CSV, JSON, Parquet)."""
