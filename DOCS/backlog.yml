@@ -6,10 +6,10 @@ metadata:
   scoring_methodology: "WSJF (Weighted Shortest Job First)"
   scoring_formula: "(Business Value + Time Criticality + Risk Reduction) / Job Size"
   scale: "1-13 Fibonacci scale"
-  last_updated: "2025-07-25"
-  current_branch: "terragon/autonomous-backlog-management-4er1by"
-  completion_status: "13/15 items completed (87% completion rate)"
-  autonomous_session: "Updated by Terry - Autonomous Senior Coding Assistant"
+  last_updated: "2025-07-26"
+  current_branch: "terragon/autonomous-backlog-management-sfytya"
+  completion_status: "14/20 items completed (70% completion rate)"
+  autonomous_session: "Updated by Terry - Autonomous Senior Coding Assistant - Cycle 3"
   
 scoring_criteria:
   business_value:
@@ -529,6 +529,167 @@ backlog:
     effort_hours: 16
     dependencies: []
     blockers: []
+
+  # CRITICAL SECURITY & CODE QUALITY ITEMS - NEWLY DISCOVERED
+
+  - id: "ETL-016"
+    title: "Fix SQL Injection Vulnerabilities"
+    description: "Replace raw SQL construction in DataLoader with parameterized queries"
+    type: "Security"
+    status: "NEW"
+    priority: "P0"
+    wsjf_score: 10.0
+    business_value: 8
+    time_criticality: 13
+    risk_reduction: 13
+    job_size: 3
+    location: "src/agent_orchestrated_etl/orchestrator.py:DataLoader"
+    acceptance_criteria:
+      - "Replace all raw SQL string formatting with parameterized queries"
+      - "Use SQLAlchemy ORM methods instead of raw SQL where possible"
+      - "Add input validation for all user-provided data"
+      - "Implement SQL injection testing in test suite"
+      - "Security audit of all database operations"
+    tech_notes:
+      - "Focus on upsert operations using raw SQL construction"
+      - "Use SQLAlchemy's text() with bound parameters"
+      - "Implement comprehensive input sanitization"
+    security_considerations:
+      - "Critical: Prevents SQL injection attacks"
+      - "Validates all user inputs before database operations"
+      - "Audit trail for all database modifications"
+    effort_hours: 16
+    dependencies: []
+    blockers: []
+    created_at: "2025-07-26"
+    discovered_by: "Autonomous code quality analysis"
+
+  - id: "ETL-017"
+    title: "Implement Proper Secret Management"
+    description: "Remove secrets from configuration files and ensure AWS Secrets Manager is used consistently"
+    type: "Security"
+    status: "NEW"
+    priority: "P0"
+    wsjf_score: 9.5
+    business_value: 10
+    time_criticality: 8
+    risk_reduction: 10
+    job_size: 3
+    location: "src/agent_orchestrated_etl/config.py"
+    acceptance_criteria:
+      - "Audit all configuration files for hardcoded secrets"
+      - "Ensure all secrets retrieved from AWS Secrets Manager"
+      - "Implement secret rotation handling"
+      - "Add validation to prevent secret logging"
+      - "Create secret management documentation"
+    tech_notes:
+      - "Scan for hardcoded passwords, keys, tokens"
+      - "Implement secret validation functions"
+      - "Add environment variable fallback with warnings"
+    security_considerations:
+      - "Prevents credential leakage"
+      - "Enables secret rotation"
+      - "Audit trail for secret access"
+    effort_hours: 12
+    dependencies: []
+    blockers: []
+    created_at: "2025-07-26"
+    discovered_by: "Autonomous code quality analysis"
+
+  - id: "ETL-018"
+    title: "Refactor Large Files for Maintainability"
+    description: "Break down etl_agent.py (2,697 lines) and other large files into smaller modules"
+    type: "Refactoring"
+    status: "NEW"
+    priority: "P1"
+    wsjf_score: 8.0
+    business_value: 5
+    time_criticality: 8
+    risk_reduction: 8
+    job_size: 8
+    location: "src/agent_orchestrated_etl/agents/etl_agent.py"
+    acceptance_criteria:
+      - "Split etl_agent.py into logical modules (extraction, transformation, loading)"
+      - "Refactor monitor_agent.py and orchestrator_agent.py similarly"
+      - "Maintain backward compatibility"
+      - "Update imports and tests"
+      - "Ensure test coverage maintained"
+    tech_notes:
+      - "Create separate modules for different responsibilities"
+      - "Use dependency injection for cross-module communication"
+      - "Maintain existing API interfaces"
+    security_considerations:
+      - "No security impact, behavior-preserving refactor"
+      - "Easier security review of smaller modules"
+    effort_hours: 40
+    dependencies: []
+    blockers: []
+    created_at: "2025-07-26"
+    discovered_by: "Autonomous code quality analysis"
+
+  - id: "ETL-019"
+    title: "Fix Thread Safety Issues"
+    description: "Implement proper synchronization for shared state in multi-agent environments"
+    type: "Bug"
+    status: "NEW"
+    priority: "P1"
+    wsjf_score: 7.5
+    business_value: 6
+    time_criticality: 8
+    risk_reduction: 8
+    job_size: 5
+    location: "src/agent_orchestrated_etl/agents/"
+    acceptance_criteria:
+      - "Identify all shared state variables"
+      - "Implement thread-safe access patterns"
+      - "Add synchronization primitives where needed"
+      - "Create thread safety tests"
+      - "Document thread safety guarantees"
+    tech_notes:
+      - "Use asyncio.Lock for async code"
+      - "threading.Lock for synchronous shared state"
+      - "Consider using queue.Queue for thread-safe communication"
+    security_considerations:
+      - "Prevents race conditions that could lead to data corruption"
+      - "Ensures consistent state in security-critical operations"
+    effort_hours: 24
+    dependencies: []
+    blockers: []
+    created_at: "2025-07-26"
+    discovered_by: "Autonomous code quality analysis"
+
+  - id: "ETL-020"
+    title: "Setup Static Analysis Tools"
+    description: "Configure ruff, mypy, and pre-commit hooks for code quality enforcement"
+    type: "Tooling"
+    status: "COMPLETED"
+    completed_date: "2025-07-26"
+    implementation_quality: "Comprehensive tooling setup with documentation and security integration"
+    priority: "P1"
+    wsjf_score: 6.0
+    business_value: 5
+    time_criticality: 5
+    risk_reduction: 6
+    job_size: 2
+    location: "Repository root"
+    acceptance_criteria:
+      - "Create .ruff.toml configuration"
+      - "Setup mypy.ini with strict settings"
+      - "Configure pre-commit hooks"
+      - "Add CI/CD integration for quality checks"
+      - "Document code quality standards"
+    tech_notes:
+      - "Use existing pyproject.toml dev dependencies"
+      - "Configure for Python 3.8+ compatibility"
+      - "Set up incremental mypy checking"
+    security_considerations:
+      - "Helps catch security-related code patterns"
+      - "Enforces consistent coding standards"
+    effort_hours: 8
+    dependencies: []
+    blockers: []
+    created_at: "2025-07-26"
+    discovered_by: "Autonomous code quality analysis"
 
 # DISCOVERY AND MAINTENANCE ITEMS
 
