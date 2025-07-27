@@ -71,7 +71,18 @@ class TestEnhancedBaseAgent:
     def enhanced_agent(self, mock_agent_config):
         """Create enhanced agent for testing."""
         with patch('src.agent_orchestrated_etl.agents.base_agent.get_logger'):
-            agent = BaseAgent(mock_agent_config)
+            # Create a concrete implementation of BaseAgent for testing
+            class TestableBaseAgent(BaseAgent):
+                def _initialize_agent(self):
+                    pass
+                
+                def _process_task(self, task):
+                    return {"status": "completed", "result": "test"}
+                
+                def get_system_prompt(self):
+                    return "Test agent prompt"
+            
+            agent = TestableBaseAgent(mock_agent_config)
             return agent
     
     def test_performance_metrics_initialization(self, enhanced_agent):
@@ -407,9 +418,43 @@ class TestEnhancedSelectionIntegration:
                 agent = Mock()
                 agent.agent_id = agent_id
                 agent.specialization = specialization
-                agent.get_capabilities.return_value = [
-                    Mock(name=f"{specialization}_processing", confidence_level=0.9)
-                ]
+                
+                # Create comprehensive capabilities for each specialization
+                capabilities = []
+                if specialization == "database":
+                    capabilities = [
+                        Mock(name="database_processing", confidence_level=0.9),
+                        Mock(name="database_optimization", confidence_level=0.85),
+                        Mock(name="postgresql_optimization", confidence_level=0.8),
+                        Mock(name="high_throughput", confidence_level=0.8),
+                        Mock(name="memory_optimization", confidence_level=0.7)
+                    ]
+                    # Set the actual name attribute that the coordination code expects
+                    capabilities[0].name = "database_processing"
+                    capabilities[1].name = "database_optimization"
+                    capabilities[2].name = "postgresql_optimization"
+                    capabilities[3].name = "high_throughput"
+                    capabilities[4].name = "memory_optimization"
+                elif specialization == "api":
+                    capabilities = [
+                        Mock(name="api_processing", confidence_level=0.9),
+                        Mock(name="rest_api", confidence_level=0.85),
+                        Mock(name="high_throughput", confidence_level=0.7)
+                    ]
+                    capabilities[0].name = "api_processing"
+                    capabilities[1].name = "rest_api"
+                    capabilities[2].name = "high_throughput"
+                else:  # general
+                    capabilities = [
+                        Mock(name="general_processing", confidence_level=0.7),
+                        Mock(name="data_extraction", confidence_level=0.6),
+                        Mock(name="basic_operations", confidence_level=0.8)
+                    ]
+                    capabilities[0].name = "general_processing"
+                    capabilities[1].name = "data_extraction"
+                    capabilities[2].name = "basic_operations"
+                
+                agent.get_capabilities.return_value = capabilities
                 agent.get_performance_metrics.return_value = {
                     "success_rate": 0.95,
                     "avg_execution_time": 200,
