@@ -1,0 +1,69 @@
+{
+  "name": "Agent-Orchestrated ETL Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff",
+        "ms-python.black-formatter",
+        "ms-toolsai.jupyter",
+        "redhat.vscode-yaml",
+        "ms-vscode.docker",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "ms-python.debugpy",
+        "ms-vscode.test-adapter-converter",
+        "littlefoxteam.vscode-python-test-adapter"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "black",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["-v", "--tb=short"],
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/.pytest_cache": true,
+          "**/.mypy_cache": true,
+          "**/.ruff_cache": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "pip install -e .[dev,vector] && pre-commit install",
+  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
+  "forwardPorts": [8080, 8793, 5555],
+  "portsAttributes": {
+    "8080": {
+      "label": "Airflow Webserver",
+      "onAutoForward": "notify"
+    },
+    "8793": {
+      "label": "Airflow Scheduler",
+      "onAutoForward": "ignore"
+    },
+    "5555": {
+      "label": "Monitoring Dashboard",
+      "onAutoForward": "notify"
+    }
+  },
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "remoteEnv": {
+    "AIRFLOW_HOME": "${containerWorkspaceFolder}/airflow",
+    "PYTHONPATH": "${containerWorkspaceFolder}/src"
+  }
+}

@@ -1,0 +1,181 @@
+version: '3.8'
+
+services:
+  # Main application
+  app:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://etl_user:etl_password@postgres:5432/etl_db
+      - REDIS_HOST=redis
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://airflow:airflow@postgres:5432/airflow
+    volumes:
+      - .:/app
+      - airflow_logs:/app/airflow/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - etl_network
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_password
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - etl_network
+
+  # Redis for caching and queuing
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - etl_network
+
+  # Airflow webserver
+  airflow-webserver:
+    build:
+      context: .
+      target: development
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin &&
+        airflow webserver --port 8080
+      "
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=YlCImzjge_TeZc7jDG7SHa7gJNlTKLCCgSxGJhgir-M=
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=true
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
+      - AIRFLOW_HOME=/app/airflow
+    volumes:
+      - .:/app
+      - airflow_logs:/app/airflow/logs
+      - airflow_dags:/app/airflow/dags
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - etl_network
+
+  # Airflow scheduler
+  airflow-scheduler:
+    build:
+      context: .
+      target: development
+    command: airflow scheduler
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=YlCImzjge_TeZc7jDG7SHa7gJNlTKLCCgSxGJhgir-M=
+      - AIRFLOW_HOME=/app/airflow
+    volumes:
+      - .:/app
+      - airflow_logs:/app/airflow/logs
+      - airflow_dags:/app/airflow/dags
+    depends_on:
+      - postgres
+      - redis
+      - airflow-webserver
+    networks:
+      - etl_network
+
+  # Monitoring dashboard
+  monitoring:
+    build:
+      context: .
+      target: development
+    command: python -m agent_orchestrated_etl.monitoring.websocket_server
+    ports:
+      - "5555:5555"
+    environment:
+      - ENVIRONMENT=development
+      - MONITORING_WEBSOCKET_PORT=5555
+    volumes:
+      - .:/app
+    depends_on:
+      - app
+      - redis
+    networks:
+      - etl_network
+
+  # MinIO for S3-compatible object storage (development)
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    networks:
+      - etl_network
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - etl_network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - etl_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  airflow_logs:
+  airflow_dags:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  etl_network:
+    driver: bridge
