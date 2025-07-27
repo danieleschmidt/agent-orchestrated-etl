@@ -1,0 +1,99 @@
+# Prometheus configuration for Agent-Orchestrated-ETL
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'agent-etl-monitor'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Rules files
+rule_files:
+  - "alert_rules.yml"
+  - "recording_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Agent-Orchestrated-ETL application
+  - job_name: 'agent-etl-app'
+    static_configs:
+      - targets: ['app:8793']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Health endpoints
+  - job_name: 'agent-etl-health'
+    static_configs:
+      - targets: ['app:8793']
+    metrics_path: '/health'
+    scrape_interval: 30s
+
+  # Node exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # PostgreSQL exporter
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Redis exporter
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # Docker container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+  # Airflow metrics (if available)
+  - job_name: 'airflow'
+    static_configs:
+      - targets: ['airflow-webserver:8080']
+    metrics_path: '/admin/metrics'
+    scrape_interval: 60s
+
+  # ETL Pipeline metrics
+  - job_name: 'etl-pipelines'
+    static_configs:
+      - targets: ['app:8793']
+    metrics_path: '/pipeline/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Agent metrics
+  - job_name: 'agent-metrics'
+    static_configs:
+      - targets: ['app:8793']
+    metrics_path: '/agent/metrics'
+    scrape_interval: 20s
+
+# Remote write configuration (optional - for long-term storage)
+# remote_write:
+#   - url: "https://prometheus-remote-write-endpoint.com/api/v1/write"
+#     basic_auth:
+#       username: 'user'
+#       password: 'password'
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 10GB
+    wal-compression: true

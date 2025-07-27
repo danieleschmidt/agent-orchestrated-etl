@@ -192,3 +192,127 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# =============================================================================
+# Project-specific additions
+# =============================================================================
+
+# Environment and configuration files
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+Dockerfile.local
+docker-compose.override.yml
+.dockerignore
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+
+# Logs and monitoring
+*.log
+logs/
+*.out
+*.err
+
+# Security and secrets
+.secrets.baseline
+bandit-report.json
+.security/
+secrets/
+credentials/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache and temporary files
+.cache/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Testing artifacts
+.tox/
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+test-results/
+test-reports/
+allure-results/
+allure-reports/
+
+# Documentation builds
+docs/_build/
+site/
+_site/
+
+# Package manager artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Machine learning and data
+models/
+data/
+datasets/
+*.h5
+*.pkl
+*.pickle
+*.joblib
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Airflow
+airflow/
+airflow.cfg
+airflow.db
+webserver_config.py
+
+# Local development overrides
+docker-compose.local.yml
+local.yml
+local.yaml
+
+# Performance and profiling
+*.prof
+*.pyc
+profile_output.*

@@ -1,0 +1,13 @@
+# Grafana dashboard provisioning configuration
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: 'agent-etl-dashboards'
+    type: file
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true
