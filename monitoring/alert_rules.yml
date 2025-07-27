@@ -1,0 +1,265 @@
+# Prometheus alert rules for Agent-Orchestrated-ETL
+# =============================================================================
+
+groups:
+  # ==========================================================================
+  # Application Health Alerts
+  # ==========================================================================
+  
+  - name: application.health
+    rules:
+      - alert: ApplicationDown
+        expr: up{job="agent-etl-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "Agent-ETL application is down"
+          description: "The Agent-Orchestrated-ETL application has been down for more than 1 minute."
+
+      - alert: HealthCheckFailing
+        expr: agent_etl_health_status != 1
+        for: 2m
+        labels:
+          severity: warning
+          component: health
+        annotations:
+          summary: "Application health check failing"
+          description: "Health check for {{ $labels.check_name }} has been failing for more than 2 minutes."
+
+      - alert: HighErrorRate
+        expr: rate(agent_etl_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second over the last 5 minutes."
+
+  # ==========================================================================
+  # Performance Alerts
+  # ==========================================================================
+  
+  - name: performance
+    rules:
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(agent_etl_request_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s over the last 5 minutes."
+
+      - alert: PipelineExecutionTimeout
+        expr: rate(agent_etl_pipeline_timeouts_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: pipeline
+        annotations:
+          summary: "Pipeline execution timeouts"
+          description: "Pipeline executions are timing out at a rate of {{ $value }} per second."
+
+      - alert: SlowPipelineExecution
+        expr: histogram_quantile(0.95, rate(agent_etl_pipeline_duration_seconds_bucket[10m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: pipeline
+        annotations:
+          summary: "Slow pipeline execution"
+          description: "95th percentile pipeline execution time is {{ $value }}s."
+
+  # ==========================================================================
+  # Resource Usage Alerts
+  # ==========================================================================
+  
+  - name: resources
+    rules:
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% over the last 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (process_resident_memory_bytes / process_virtual_memory_max_bytes) * 100 > 90
+        for: 3m
+        labels:
+          severity: critical
+          component: resources
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% of available memory."
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 1m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value }}% full on root filesystem."
+
+  # ==========================================================================
+  # Database Alerts
+  # ==========================================================================
+  
+  - name: database
+    rules:
+      - alert: DatabaseDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database has been down for more than 1 minute."
+
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(agent_etl_db_query_duration_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries"
+          description: "95th percentile database query time is {{ $value }}s."
+
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: agent_etl_db_connections_active / agent_etl_db_connections_max > 0.9
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Database connection pool is {{ $value | humanizePercentage }} full."
+
+  # ==========================================================================
+  # Cache Alerts
+  # ==========================================================================
+  
+  - name: cache
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis-exporter"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis cache has been down for more than 1 minute."
+
+      - alert: HighCacheMissRate
+        expr: rate(agent_etl_cache_misses_total[5m]) / rate(agent_etl_cache_requests_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "High cache miss rate"
+          description: "Cache miss rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+  # ==========================================================================
+  # Agent System Alerts
+  # ==========================================================================
+  
+  - name: agents
+    rules:
+      - alert: AgentFailures
+        expr: rate(agent_etl_agent_failures_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: agents
+        annotations:
+          summary: "High agent failure rate"
+          description: "Agent {{ $labels.agent_type }} is failing at {{ $value }} failures per second."
+
+      - alert: AgentResponseTime
+        expr: histogram_quantile(0.95, rate(agent_etl_agent_duration_seconds_bucket[5m])) > 10
+        for: 3m
+        labels:
+          severity: warning
+          component: agents
+        annotations:
+          summary: "Slow agent response time"
+          description: "Agent {{ $labels.agent_type }} 95th percentile response time is {{ $value }}s."
+
+      - alert: StuckPipelines
+        expr: agent_etl_pipelines_running - agent_etl_pipelines_running offset 10m > 0
+        for: 15m
+        labels:
+          severity: critical
+          component: pipeline
+        annotations:
+          summary: "Pipelines appear to be stuck"
+          description: "{{ $value }} pipelines have been running for more than 15 minutes without completion."
+
+  # ==========================================================================
+  # Data Quality Alerts
+  # ==========================================================================
+  
+  - name: data.quality
+    rules:
+      - alert: DataValidationFailures
+        expr: rate(agent_etl_validation_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "Data validation failures detected"
+          description: "Data validation is failing at {{ $value }} failures per second for {{ $labels.source_type }}."
+
+      - alert: UnexpectedDataVolume
+        expr: |
+          (
+            rate(agent_etl_data_records_processed_total[1h]) - 
+            rate(agent_etl_data_records_processed_total[1h] offset 24h)
+          ) / rate(agent_etl_data_records_processed_total[1h] offset 24h) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: data-quality
+        annotations:
+          summary: "Unexpected data volume change"
+          description: "Data volume for {{ $labels.source_type }} has changed by {{ $value | humanizePercentage }} compared to same time yesterday."
+
+  # ==========================================================================
+  # Security Alerts
+  # ==========================================================================
+  
+  - name: security
+    rules:
+      - alert: UnauthorizedAccess
+        expr: rate(agent_etl_unauthorized_requests_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Unauthorized access attempts"
+          description: "{{ $value }} unauthorized access attempts per second detected."
+
+      - alert: SuspiciousActivity
+        expr: rate(agent_etl_suspicious_activity_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Suspicious activity detected: {{ $labels.activity_type }}"

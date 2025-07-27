@@ -1,0 +1,265 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Core Application Services
+  # =============================================================================
+  
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+        VERSION: ${VERSION:-0.0.1}
+    container_name: agent-etl-app
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/agent_etl
+      - REDIS_URL=redis://redis:6379/0
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://postgres:password@postgres:5432/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY=development-secret-key
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./docs:/app/docs
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "8080:8080"  # Airflow webserver
+      - "8793:8793"  # Application API
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - agent-etl-network
+    command: ["tail", "-f", "/dev/null"]  # Keep container running for development
+
+  # =============================================================================
+  # Database Services
+  # =============================================================================
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: agent-etl-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agent_etl
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - agent-etl-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Cache and Message Queue
+  # =============================================================================
+  
+  redis:
+    image: redis:7-alpine
+    container_name: agent-etl-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agent-etl-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # Airflow Services
+  # =============================================================================
+  
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: agent-etl-airflow-init
+    environment:
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://postgres:password@postgres:5432/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=development-secret-key
+      - _AIRFLOW_DB_UPGRADE=true
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - agent-etl-network
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --role Admin --username admin --email admin@example.com --firstname admin --lastname admin --password admin
+      "
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: agent-etl-airflow-webserver
+    environment:
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://postgres:password@postgres:5432/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=development-secret-key
+      - AIRFLOW__CORE__DAGS_FOLDER=/app/dags
+    volumes:
+      - ./dags:/app/dags
+      - ./logs:/app/logs
+    ports:
+      - "8081:8080"  # Airflow webserver on different port
+    depends_on:
+      - postgres
+      - airflow-init
+    networks:
+      - agent-etl-network
+    command: ["airflow", "webserver"]
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: agent-etl-airflow-scheduler
+    environment:
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql://postgres:password@postgres:5432/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=development-secret-key
+      - AIRFLOW__CORE__DAGS_FOLDER=/app/dags
+    volumes:
+      - ./dags:/app/dags
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - airflow-init
+    networks:
+      - agent-etl-network
+    command: ["airflow", "scheduler"]
+
+  # =============================================================================
+  # Monitoring Services
+  # =============================================================================
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agent-etl-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - agent-etl-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agent-etl-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - agent-etl-network
+    depends_on:
+      - prometheus
+
+  # =============================================================================
+  # Development Tools
+  # =============================================================================
+  
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: agent-etl-jupyter
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=development
+    volumes:
+      - ./notebooks:/app/notebooks
+      - ./src:/app/src
+      - ./data:/app/data
+    ports:
+      - "8888:8888"
+    networks:
+      - agent-etl-network
+    command: >
+      bash -c "
+        pip install jupyter jupyterlab &&
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token=development
+      "
+
+  # =============================================================================
+  # Testing Services
+  # =============================================================================
+  
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: agent-etl-test
+    environment:
+      - ENVIRONMENT=test
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/test_agent_etl
+      - REDIS_URL=redis://redis:6379/1
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./coverage:/app/coverage
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - agent-etl-network
+    command: ["pytest", "tests/", "-v", "--cov=src"]
+
+# =============================================================================
+# Networks and Volumes
+# =============================================================================
+
+networks:
+  agent-etl-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

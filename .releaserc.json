@@ -1,0 +1,107 @@
+{
+  "branches": [
+    "main",
+    {
+      "name": "develop",
+      "prerelease": "beta"
+    },
+    {
+      "name": "alpha",
+      "prerelease": "alpha"
+    }
+  ],
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          {"type": "feat", "release": "minor"},
+          {"type": "fix", "release": "patch"},
+          {"type": "perf", "release": "patch"},
+          {"type": "revert", "release": "patch"},
+          {"type": "docs", "release": false},
+          {"type": "style", "release": false},
+          {"type": "chore", "release": false},
+          {"type": "refactor", "release": "patch"},
+          {"type": "test", "release": false},
+          {"type": "build", "release": false},
+          {"type": "ci", "release": false},
+          {"breaking": true, "release": "major"}
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES", "BREAKING"]
+        }
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            {"type": "feat", "section": "🚀 Features"},
+            {"type": "fix", "section": "🐛 Bug Fixes"},
+            {"type": "perf", "section": "⚡ Performance"},
+            {"type": "revert", "section": "⏪ Reverts"},
+            {"type": "docs", "section": "📚 Documentation"},
+            {"type": "style", "section": "💄 Styles"},
+            {"type": "refactor", "section": "♻️ Code Refactoring"},
+            {"type": "test", "section": "✅ Tests"},
+            {"type": "build", "section": "🏗️ Build System"},
+            {"type": "ci", "section": "👷 CI/CD"},
+            {"type": "chore", "section": "🔧 Chores"},
+            {"type": "security", "section": "🔒 Security"}
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# Changelog\n\nAll notable changes to Agent-Orchestrated-ETL will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "sed -i 's/version = \".*\"/version = \"${nextRelease.version}\"/' pyproject.toml"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "dist/*.tar.gz",
+            "label": "Source Distribution"
+          },
+          {
+            "path": "dist/*.whl",
+            "label": "Python Wheel"
+          },
+          {
+            "path": "sbom.spdx.json",
+            "label": "Software Bill of Materials (SBOM)"
+          }
+        ],
+        "assignees": ["@terragon-labs/maintainers"],
+        "addReleases": "bottom"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md", "pyproject.toml"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ],
+  "preset": "conventionalcommits",
+  "tagFormat": "v${version}",
+  "repositoryUrl": "https://github.com/your-org/agent-orchestrated-etl.git",
+  "debug": false,
+  "dryRun": false,
+  "ci": true
+}
