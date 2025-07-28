@@ -1,0 +1,216 @@
+# Security configuration for agent-orchestrated-etl
+# =============================================================================
+
+# Security scanning configuration
+security:
+  # SAST (Static Application Security Testing)
+  sast:
+    enabled: true
+    tools:
+      - bandit  # Python security linter
+      - semgrep  # Multi-language static analysis
+      - codeql   # GitHub's semantic code analysis
+    
+    # Bandit configuration
+    bandit:
+      confidence_level: medium
+      severity_level: medium
+      exclude_paths:
+        - tests/
+        - docs/
+      skip_tests:
+        - B101  # assert_used - allowed in tests
+        - B601  # paramiko_calls - needed for SSH functionality
+    
+    # Semgrep rules
+    semgrep:
+      rules:
+        - p/security-audit
+        - p/owasp-top-ten
+        - p/python
+      exclude_rules:
+        - python.django.security.audit.xss.template-autoescape-false
+    
+  # DAST (Dynamic Application Security Testing)
+  dast:
+    enabled: false  # Enable when application endpoints are available
+    target_url: http://localhost:8793
+    authentication:
+      type: none
+  
+  # Dependency scanning
+  dependencies:
+    enabled: true
+    tools:
+      - safety      # Python package vulnerability scanner
+      - snyk        # Multi-language dependency scanner
+      - trivy       # Container and filesystem scanner
+    
+    # Vulnerability thresholds
+    thresholds:
+      critical: 0    # Block on any critical vulnerabilities
+      high: 3        # Allow up to 3 high-severity vulnerabilities
+      medium: 10     # Allow up to 10 medium-severity vulnerabilities
+      low: -1        # No limit on low-severity vulnerabilities
+  
+  # Container security
+  container:
+    enabled: true
+    base_images:
+      allowed:
+        - python:3.11-slim
+        - python:3.10-slim
+        - postgres:15-alpine
+        - redis:7-alpine
+        - prom/prometheus:latest
+        - grafana/grafana:latest
+    
+    # Security policies
+    policies:
+      - no_root_user: true
+      - read_only_filesystem: false  # Some components need write access
+      - no_privileged: true
+      - drop_capabilities: true
+  
+  # Secret management
+  secrets:
+    detection:
+      enabled: true
+      baseline_file: .secrets.baseline
+      plugins:
+        - AWSKeyDetector
+        - GitHubTokenDetector
+        - PrivateKeyDetector
+        - BasicAuthDetector
+        - JwtTokenDetector
+    
+    management:
+      provider: aws_secrets_manager  # or hashicorp_vault, azure_key_vault
+      rotation_enabled: true
+      rotation_schedule: 90  # days
+  
+  # Access control
+  access_control:
+    authentication:
+      method: jwt
+      token_expiry: 24h
+      refresh_enabled: true
+    
+    authorization:
+      rbac_enabled: true
+      roles:
+        - admin
+        - operator
+        - viewer
+      
+      permissions:
+        admin:
+          - pipeline:create
+          - pipeline:delete
+          - pipeline:execute
+          - system:configure
+          - users:manage
+        operator:
+          - pipeline:execute
+          - pipeline:view
+          - metrics:view
+        viewer:
+          - pipeline:view
+          - metrics:view
+  
+  # Network security
+  network:
+    tls:
+      enabled: true
+      min_version: "1.2"
+      cipher_suites:
+        - ECDHE-RSA-AES256-GCM-SHA384
+        - ECDHE-RSA-AES128-GCM-SHA256
+    
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:3000
+        - http://localhost:8080
+      allowed_methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+      allowed_headers:
+        - Content-Type
+        - Authorization
+  
+  # Logging and monitoring
+  security_monitoring:
+    audit_logging:
+      enabled: true
+      events:
+        - authentication_failure
+        - authorization_failure
+        - privileged_operations
+        - data_access
+        - configuration_changes
+    
+    alerting:
+      enabled: true
+      channels:
+        - security-alerts  # Slack channel
+        - security-team@company.com
+    
+    retention:
+      audit_logs: 365  # days
+      security_events: 180  # days
+  
+  # Compliance frameworks
+  compliance:
+    frameworks:
+      - SOC2
+      - PCI-DSS
+      - GDPR
+      - HIPAA  # If handling health data
+    
+    controls:
+      data_encryption:
+        at_rest: true
+        in_transit: true
+        key_management: aws_kms
+      
+      data_privacy:
+        pii_detection: true
+        data_masking: true
+        data_retention: 2555  # days (7 years)
+      
+      access_logging:
+        enabled: true
+        immutable: true
+        centralized: true
+
+# Security incident response
+incident_response:
+  playbooks:
+    - security_breach
+    - data_leak
+    - unauthorized_access
+    - malware_detection
+  
+  contacts:
+    security_team: security@company.com
+    legal_team: legal@company.com
+    pr_team: pr@company.com
+  
+  escalation:
+    - level_1: 15m  # Security team notification
+    - level_2: 1h   # Management notification
+    - level_3: 4h   # Executive notification
+
+# Security training and awareness
+security_training:
+  mandatory_topics:
+    - secure_coding_practices
+    - data_handling_procedures
+    - incident_response
+    - social_engineering_awareness
+  
+  frequency: quarterly
+  tracking: required
