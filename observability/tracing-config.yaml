@@ -1,0 +1,110 @@
+# OpenTelemetry tracing configuration for agent-orchestrated-etl
+# Provides distributed tracing across ETL pipeline components
+
+service:
+  name: agent-orchestrated-etl
+  version: 0.0.1
+  namespace: terragon-labs
+
+tracing:
+  enabled: true
+  
+  # Jaeger configuration for local development
+  jaeger:
+    agent_host: localhost
+    agent_port: 6831
+    collector_endpoint: http://localhost:14268/api/traces
+    service_name: ${SERVICE_NAME:-agent-orchestrated-etl}
+    
+  # OTLP configuration for production
+  otlp:
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    headers:
+      authorization: Bearer ${OTEL_AUTH_TOKEN}
+    compression: gzip
+    
+  # Sampling configuration
+  sampling:
+    type: probabilistic
+    param: 0.1  # Sample 10% of traces in production
+    
+  # Resource attributes
+  resource:
+    service.name: agent-orchestrated-etl
+    service.version: 0.0.1
+    deployment.environment: ${ENVIRONMENT:-development}
+    cloud.provider: ${CLOUD_PROVIDER:-aws}
+    cloud.region: ${AWS_REGION:-us-east-1}
+
+# Instrumentation configuration
+instrumentation:
+  # Automatic instrumentation for common libraries
+  auto_instrument:
+    - requests
+    - sqlalchemy
+    - boto3
+    - aiohttp
+    - langchain
+    
+  # Custom span attributes
+  custom_attributes:
+    - pipeline.id
+    - agent.type
+    - data.source
+    - transformation.type
+    - extraction.method
+    
+  # Performance monitoring
+  performance:
+    record_exception: true
+    capture_headers: true
+    capture_query_params: false  # Security: avoid PII
+    max_attribute_length: 1024
+
+# Export configuration
+exporters:
+  console:
+    enabled: ${DEBUG:-false}
+    
+  jaeger:
+    enabled: true
+    batch_size: 512
+    max_export_batch_size: 512
+    export_timeout: 30s
+    
+  otlp:
+    enabled: true
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    timeout: 10s
+    compression: gzip
+    
+# Processor configuration
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+    
+  memory_limiter:
+    limit_mib: 128
+    spike_limit_mib: 32
+    check_interval: 5s
+
+# Advanced features
+advanced:
+  # Context propagation
+  propagation:
+    - b3
+    - tracecontext
+    - baggage
+    
+  # Custom metrics integration
+  metrics:
+    enabled: true
+    prefix: agent_etl_
+    
+  # Error tracking
+  error_tracking:
+    enabled: true
+    capture_locals: false  # Security: avoid sensitive data
+    max_stack_frames: 50
