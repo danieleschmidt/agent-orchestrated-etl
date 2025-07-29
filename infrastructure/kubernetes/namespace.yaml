@@ -1,0 +1,12 @@
+# Kubernetes namespace for Agent-Orchestrated-ETL
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-etl
+  labels:
+    name: agent-etl
+    project: agent-orchestrated-etl
+    managed-by: kubectl
+  annotations:
+    description: "Namespace for Agent-Orchestrated-ETL workloads"
+    contact: "devops@terragon-labs.com"

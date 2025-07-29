@@ -27,7 +27,15 @@
     "docker:run": "docker run -it --rm agent-orchestrated-etl",
     "docker:compose": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "validate": "npm run lint && npm run typecheck && npm run test && npm run security"
+    "validate": "npm run lint && npm run typecheck && npm run test && npm run security",
+    "sbom:generate": "python scripts/generate_sbom.py",
+    "security:scan": "python scripts/vulnerability_scanner.py",
+    "performance:benchmark": "python scripts/performance_benchmark.py",
+    "chaos:test": "python chaos-engineering/chaos-runner.py",
+    "infra:plan": "cd infrastructure/terraform && terraform plan",
+    "infra:apply": "cd infrastructure/terraform && terraform apply",
+    "k8s:deploy": "kubectl apply -f infrastructure/kubernetes/",
+    "optimization:full": "npm run sbom:generate && npm run security:scan && npm run performance:benchmark"
   },
   "keywords": [
     "etl",
