@@ -1,0 +1,159 @@
+# Service Level Indicators and Objectives for agent-orchestrated-etl
+# Defines measurable reliability targets for the ETL system
+
+service_name: agent-orchestrated-etl
+version: "1.0"
+
+# Service Level Indicators (SLIs) - What we measure
+slis:
+  # Availability SLI
+  availability:
+    description: "Percentage of successful pipeline executions"
+    query: |
+      (
+        sum(rate(pipeline_executions_total{status="success"}[5m])) /
+        sum(rate(pipeline_executions_total[5m]))
+      ) * 100
+    unit: percentage
+    
+  # Latency SLI  
+  latency:
+    description: "95th percentile of pipeline execution time"
+    query: |
+      histogram_quantile(0.95, 
+        rate(pipeline_duration_seconds_bucket[5m])
+      )
+    unit: seconds
+    
+  # Data Quality SLI
+  data_quality:
+    description: "Percentage of data records passing validation"
+    query: |
+      (
+        sum(rate(data_validation_passed_total[5m])) /
+        sum(rate(data_validation_total[5m]))
+      ) * 100
+    unit: percentage
+    
+  # Error Rate SLI
+  error_rate:
+    description: "Percentage of failed operations"
+    query: |
+      (
+        sum(rate(operations_total{status="error"}[5m])) /
+        sum(rate(operations_total[5m]))
+      ) * 100
+    unit: percentage
+
+# Service Level Objectives (SLOs) - Our reliability targets
+slos:
+  # Critical User Journey: Data Pipeline Execution
+  pipeline_execution:
+    description: "End-to-end data pipeline reliability"
+    objectives:
+      - sli: availability
+        target: 99.5
+        window: 30d
+        alert_threshold: 99.0
+        
+      - sli: latency
+        target: 300  # 5 minutes max
+        window: 30d
+        alert_threshold: 600  # 10 minutes
+        
+      - sli: data_quality
+        target: 99.9
+        window: 7d
+        alert_threshold: 99.5
+        
+  # System Health: Overall Service Reliability  
+  system_health:
+    description: "Overall system reliability and performance"
+    objectives:
+      - sli: error_rate
+        target: 0.1  # Less than 0.1% error rate
+        window: 7d
+        alert_threshold: 0.5
+        
+      - sli: availability
+        target: 99.9
+        window: 7d
+        alert_threshold: 99.5
+
+# Error Budget Configuration
+error_budgets:
+  pipeline_execution:
+    budget_policy: 99.5  # 0.5% error budget
+    burn_rate_alerts:
+      - threshold: 2.0   # 2x burn rate
+        window: 1h
+        severity: warning
+      - threshold: 10.0  # 10x burn rate  
+        window: 5m
+        severity: critical
+        
+  system_health:
+    budget_policy: 99.9  # 0.1% error budget
+    burn_rate_alerts:
+      - threshold: 5.0
+        window: 30m
+        severity: critical
+
+# Alerting Rules
+alerting:
+  # SLO violation alerts
+  slo_violations:
+    - name: PipelineAvailabilitySLOViolation
+      condition: availability < 99.5
+      for: 5m
+      severity: warning
+      
+    - name: PipelineLatencySLOViolation  
+      condition: latency > 300
+      for: 10m
+      severity: warning
+      
+    - name: DataQualitySLOViolation
+      condition: data_quality < 99.9
+      for: 2m
+      severity: critical
+      
+  # Error budget alerts
+  error_budget_alerts:
+    - name: ErrorBudgetExhaustion
+      condition: error_budget_remaining < 10
+      for: 1m
+      severity: critical
+      
+# Reporting Configuration  
+reporting:
+  # SLO reporting dashboard
+  dashboard:
+    refresh_interval: 5m
+    retention: 90d
+    
+  # Weekly SLO reports
+  weekly_reports:
+    enabled: true
+    recipients:
+      - sre-team@terragon-labs.com
+      - engineering-leads@terragon-labs.com
+    include_trends: true
+    include_recommendations: true
+    
+# Integration with existing monitoring
+integration:
+  prometheus:
+    enabled: true
+    scrape_interval: 15s
+    
+  grafana:
+    enabled: true
+    dashboard_uid: agent-etl-slo
+    
+  pagerduty:
+    enabled: true
+    service_key: ${PAGERDUTY_SERVICE_KEY}
+    severity_mapping:
+      critical: high
+      warning: low
