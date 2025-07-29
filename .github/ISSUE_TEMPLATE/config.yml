@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/your-org/agent-orchestrated-etl/security/advisories/new
+    about: Report a security vulnerability through GitHub's private vulnerability reporting
+  - name: Documentation
+    url: https://github.com/your-org/agent-orchestrated-etl/blob/main/README.md
+    about: Check the documentation for usage examples and API reference
+  - name: Discussions
+    url: https://github.com/your-org/agent-orchestrated-etl/discussions
+    about: Ask questions and discuss ideas with the community
