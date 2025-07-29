@@ -1,0 +1,326 @@
+# Chaos Engineering Experiments for Agent-Orchestrated-ETL
+# Using Chaos Toolkit framework for controlled failure injection
+
+version: 1.0.0
+
+# Experiment 1: Network Partition Between Agents
+title: "Agent Network Partition Resilience"
+description: |
+  Test system resilience when network communication between ETL agents
+  is disrupted. Verifies that the orchestrator can detect failures and
+  redistribute work appropriately.
+
+configuration:
+  target_environment: "staging"
+  experiment_duration: "5m"
+  
+steady-state-hypothesis:
+  title: "System processes data normally"
+  probes:
+  - name: "pipeline-throughput"
+    type: probe
+    provider:
+      type: http
+      url: http://etl-orchestrator:8080/metrics/throughput
+    tolerance:
+      type: range
+      target: value
+      range: [100, 1000]  # ops per minute
+      
+  - name: "active-agents"
+    type: probe
+    provider:
+      type: http  
+      url: http://etl-orchestrator:8080/agents/status
+    tolerance:
+      type: jsonpath
+      target: body
+      path: "$.active_count"
+      expect: 3
+
+method:
+- type: action
+  name: introduce-network-partition
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-agent-deployment", "--", "iptables", "-A", "OUTPUT", "-p", "tcp", "--dport", "8080", "-j", "DROP"]
+  pauses:
+    after: 30
+
+- type: probe
+  name: check-system-adaptation
+  provider:
+    type: http
+    url: http://etl-orchestrator:8080/agents/status
+  tolerance:
+    type: jsonpath
+    target: body
+    path: "$.healthy_count"
+    expect: 2
+
+rollbacks:
+- type: action
+  name: restore-network
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-agent-deployment", "--", "iptables", "-F"]
+
+---
+# Experiment 2: Database Connection Failure
+title: "Database Resilience Test"
+description: |
+  Simulate database connection failures to test graceful degradation
+  and connection retry mechanisms.
+
+configuration:
+  target_database: "postgresql://etl-db:5432/agent_etl"
+  failure_duration: "2m"
+
+steady-state-hypothesis:
+  title: "Database operations succeed"
+  probes:
+  - name: "database-connectivity"
+    type: probe
+    provider:
+      type: http
+      url: http://etl-orchestrator:8080/health/database
+    tolerance:
+      type: status
+      expect: 200
+
+method:
+- type: action
+  name: block-database-access
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["scale", "deployment", "postgresql", "--replicas=0"]
+  pauses:
+    after: 30
+
+- type: probe
+  name: verify-graceful-degradation
+  provider:
+    type: http
+    url: http://etl-orchestrator:8080/health
+  tolerance:
+    type: jsonpath
+    target: body
+    path: "$.status"
+    expect: "degraded"
+
+rollbacks:
+- type: action
+  name: restore-database
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["scale", "deployment", "postgresql", "--replicas=1"]
+
+---
+# Experiment 3: Memory Pressure Test
+title: "Memory Exhaustion Resilience"
+description: |
+  Test system behavior under memory pressure by consuming available
+  memory and verifying graceful handling of OOM conditions.
+
+configuration:
+  memory_pressure_mb: 1024
+  target_pod: "etl-agent"
+
+steady-state-hypothesis:
+  title: "System operates within memory limits"
+  probes:
+  - name: "memory-usage"
+    type: probe
+    provider:
+      type: process
+      path: kubectl
+      arguments: ["top", "pod", "etl-agent", "--no-headers"]
+    tolerance:
+      type: range
+      target: stdout
+      regex: "\\d+Mi"
+      range: [0, 500]
+
+method:
+- type: action
+  name: create-memory-pressure
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-agent", "--", "python", "-c", "x = [0] * (1024 * 1024 * 100); import time; time.sleep(120)"]
+  background: true
+  pauses:
+    after: 15
+
+- type: probe
+  name: check-pod-restart
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["get", "pod", "etl-agent", "-o", "jsonpath={.status.restartCount}"]
+  tolerance:
+    type: range
+    target: stdout
+    range: [1, 3]
+
+rollbacks:
+- type: action
+  name: kill-memory-consumer
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-agent", "--", "pkill", "-f", "python"]
+
+---
+# Experiment 4: Redis Cache Failure
+title: "Cache Layer Failure Resilience"
+description: |
+  Test system behavior when Redis cache becomes unavailable,
+  verifying fallback to direct database operations.
+
+steady-state-hypothesis:
+  title: "Cache operations succeed"
+  probes:
+  - name: "cache-connectivity"
+    type: probe
+    provider:
+      type: http
+      url: http://etl-orchestrator:8080/health/cache
+    tolerance:
+      type: status
+      expect: 200
+
+method:
+- type: action
+  name: stop-redis-service
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["scale", "deployment", "redis", "--replicas=0"]
+  pauses:
+    after: 20
+
+- type: probe
+  name: verify-cache-bypass
+  provider:
+    type: http
+    url: http://etl-orchestrator:8080/metrics/cache-hits
+  tolerance:
+    type: jsonpath
+    target: body
+    path: "$.bypass_mode"
+    expect: true
+
+rollbacks:
+- type: action
+  name: restore-redis
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["scale", "deployment", "redis", "--replicas=1"]
+
+---
+# Experiment 5: CPU Starvation Test
+title: "CPU Resource Starvation"
+description: |
+  Test system behavior under CPU starvation by creating high CPU load
+  and verifying that critical operations still complete.
+
+configuration:
+  cpu_load_duration: "3m"
+  target_cpu_percent: 90
+
+steady-state-hypothesis:
+  title: "System responds within acceptable latency"
+  probes:
+  - name: "api-response-time"
+    type: probe
+    provider:
+      type: http
+      url: http://etl-orchestrator:8080/health
+      timeout: 5
+    tolerance:
+      type: status
+      expect: 200
+
+method:
+- type: action
+  name: create-cpu-load
+  provider:
+    type: process  
+    path: kubectl
+    arguments: ["exec", "etl-orchestrator", "--", "stress", "--cpu", "2", "--timeout", "180s"]
+  background: true
+  pauses:
+    after: 30
+
+- type: probe
+  name: check-response-degradation
+  provider:
+    type: http
+    url: http://etl-orchestrator:8080/health
+    timeout: 10
+  tolerance:
+    type: status
+    expect: 200
+
+rollbacks:
+- type: action
+  name: stop-cpu-stress
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-orchestrator", "--", "pkill", "stress"]
+
+---
+# Experiment 6: Storage I/O Failure
+title: "Storage I/O Disruption Test"
+description: |
+  Test system resilience when storage I/O operations fail or become
+  extremely slow, simulating disk failures or network storage issues.
+
+steady-state-hypothesis:
+  title: "Storage operations complete successfully"
+  probes:
+  - name: "storage-health"
+    type: probe
+    provider:
+      type: process
+      path: kubectl
+      arguments: ["exec", "etl-agent", "--", "dd", "if=/dev/zero", "of=/tmp/test", "bs=1M", "count=10"]
+    tolerance:
+      type: status
+      expect: 0
+
+method:
+- type: action
+  name: simulate-slow-storage
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-agent", "--", "tc", "qdisc", "add", "dev", "eth0", "root", "handle", "1:", "netem", "delay", "1000ms"]
+  pauses:
+    after: 30
+
+- type: probe
+  name: verify-timeout-handling
+  provider:
+    type: http
+    url: http://etl-orchestrator:8080/metrics/storage-timeouts
+  tolerance:
+    type: jsonpath
+    target: body
+    path: "$.timeout_count"
+    expect: 0
+
+rollbacks:
+- type: action
+  name: restore-storage-speed
+  provider:
+    type: process
+    path: kubectl
+    arguments: ["exec", "etl-agent", "--", "tc", "qdisc", "del", "dev", "eth0", "root"]
