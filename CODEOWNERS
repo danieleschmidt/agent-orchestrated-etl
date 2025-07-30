@@ -1,0 +1,42 @@
+# CODEOWNERS file for automated PR review assignments
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners for all files
+* @terragon-labs/core-team
+
+# Core source code
+/src/ @terragon-labs/core-team @terragon-labs/python-experts
+
+# Agent implementation
+/src/agent_orchestrated_etl/agents/ @terragon-labs/ai-team
+
+# Infrastructure and deployment
+/infrastructure/ @terragon-labs/devops-team
+/docker-compose.yml @terragon-labs/devops-team
+/Dockerfile @terragon-labs/devops-team
+/.github/workflows/ @terragon-labs/devops-team
+
+# Security-related files
+/SECURITY.md @terragon-labs/security-team
+/.github/SECURITY.md @terragon-labs/security-team
+/scripts/vulnerability_scanner.py @terragon-labs/security-team
+/scripts/generate_sbom.py @terragon-labs/security-team
+
+# Documentation
+/docs/ @terragon-labs/tech-writers
+/*.md @terragon-labs/tech-writers
+
+# Configuration files
+/pyproject.toml @terragon-labs/core-team
+/.pre-commit-config.yaml @terragon-labs/core-team
+/mypy.ini @terragon-labs/core-team
+
+# Monitoring and observability
+/monitoring/ @terragon-labs/sre-team
+/observability/ @terragon-labs/sre-team
+
+# Testing
+/tests/ @terragon-labs/qa-team
+
+# Chaos engineering
+/chaos-engineering/ @terragon-labs/sre-team @terragon-labs/devops-team

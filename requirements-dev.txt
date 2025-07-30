@@ -1,0 +1,31 @@
+# Development dependencies
+# Generated from pyproject.toml[dev] - for environments that don't support pyproject.toml
+
+# Include production dependencies
+-r requirements.txt
+
+# Testing
+pytest==8.4.1
+pytest-asyncio>=0.21.0
+coverage==7.9.1
+
+# Code quality and linting
+ruff==0.12.1
+mypy==1.11.2
+bandit==1.7.10
+radon==6.0.1
+pydocstyle==6.3.0
+
+# Security
+detect-secrets==1.4.0
+safety==3.2.9
+
+# Pre-commit and automation
+pre-commit==3.7.0
+
+# Type stubs
+types-PyYAML==6.0.12.20241230
+types-requests>=2.32.0
+
+# Build tools
+Pygments==2.19.2
