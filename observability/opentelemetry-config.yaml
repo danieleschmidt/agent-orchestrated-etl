@@ -1,0 +1,138 @@
+# OpenTelemetry Configuration for Agent Orchestrated ETL
+# Comprehensive observability with traces, metrics, and logs
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'agent-etl'
+          static_configs:
+            - targets: ['localhost:8080']
+          scrape_interval: 15s
+          metrics_path: /metrics
+  
+  python_instrumentation:
+    endpoint: 0.0.0.0:8000
+    
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+  
+  memory_limiter:
+    limit_mib: 512
+    spike_limit_mib: 128
+    check_interval: 5s
+  
+  resource:
+    attributes:
+      - key: service.name
+        value: agent-orchestrated-etl
+        action: upsert
+      - key: service.version
+        value: ${SERVICE_VERSION}
+        action: upsert
+      - key: deployment.environment
+        value: ${DEPLOYMENT_ENV}
+        action: upsert
+      - key: service.namespace
+        value: etl-platform
+        action: upsert
+  
+  span:
+    name:
+      to_attributes:
+        rules:
+          - ^\/api\/v1\/(?P<endpoint>.*)$
+          - ^etl\.(?P<operation>\w+)\.(?P<stage>\w+)$
+  
+  metricstransform:
+    transforms:
+      - include: agent_etl_pipeline_duration_seconds
+        match_type: regexp
+        action: update
+        operations:
+          - action: add_label
+            new_label: pipeline_type
+            new_value: autonomous
+      
+      - include: agent_etl_error_rate
+        match_type: regexp
+        action: update
+        operations:
+          - action: aggregate_labels
+            label_set: [pipeline_id, error_type]
+            aggregation_type: sum
+
+exporters:
+  # OTLP export to observability backend
+  otlp:
+    endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      authorization: Bearer ${OTEL_EXPORTER_OTLP_TOKEN}
+    compression: gzip
+  
+  # Prometheus metrics export
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: agent_etl
+    const_labels:
+      environment: ${DEPLOYMENT_ENV}
+    
+  # Jaeger tracing export
+  jaeger:
+    endpoint: ${JAEGER_ENDPOINT}
+    tls:
+      insecure: false
+  
+  # Logging export
+  logging:
+    loglevel: info
+  
+  # File export for local development
+  file:
+    path: ./observability/telemetry-data.json
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp, python_instrumentation]
+      processors: [memory_limiter, resource, span, batch]
+      exporters: [otlp, jaeger, logging]
+    
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resource, metricstransform, batch]
+      exporters: [otlp, prometheus, logging]
+    
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp, logging]
+  
+  extensions: [health_check, pprof, zpages]
+  
+  telemetry:
+    logs:
+      level: "info"
+    metrics:
+      level: "detailed"
+      address: 0.0.0.0:8888
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  
+  pprof:
+    endpoint: 0.0.0.0:1777
+  
+  zpages:
+    endpoint: 0.0.0.0:55679
