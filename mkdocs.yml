@@ -1,0 +1,145 @@
+# MkDocs configuration for Agent Orchestrated ETL
+site_name: Agent Orchestrated ETL
+site_description: Hybrid Airflow + LangChain project for intelligent ETL orchestration
+site_author: Terragon Labs
+site_url: https://terragon-labs.github.io/agent-orchestrated-etl/
+
+repo_name: terragon-labs/agent-orchestrated-etl
+repo_url: https://github.com/terragon-labs/agent-orchestrated-etl
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2024 Terragon Labs
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.highlight
+    - search.share
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+plugins:
+  - search
+  - mermaid2
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_source: true
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: terragon-labs
+      repo: agent-orchestrated-etl
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quick Start: guides/quick-start.md
+    - Installation: guides/installation.md
+    - Configuration: guides/configuration.md
+  - Architecture:
+    - Overview: architecture/system-overview.md
+    - Agent Interactions: architecture/agent-interactions.md
+    - Data Flow: architecture/data-flow.md
+  - User Guide:
+    - ETL Operations: user-guide/etl-operations.md
+    - Agent Management: user-guide/agent-management.md
+    - Monitoring: user-guide/monitoring.md
+  - API Reference:
+    - Agents: api/agents.md
+    - Tools: api/tools.md
+    - Coordination: api/coordination.md
+    - API Endpoints: api/api-reference.md
+  - Development:
+    - Contributing: CONTRIBUTING.md
+    - Code Quality: developer/code-quality-standards.md
+    - Testing: developer/testing-guide.md
+    - Release Process: RELEASE_PROCESS.md
+  - Operations:
+    - Deployment: deployment/deployment-guide.md
+    - Monitoring: operations/monitoring.md
+    - Troubleshooting: operations/troubleshooting.md
+  - Security:
+    - Security Policy: security/security-policy.md
+    - Best Practices: security/best-practices.md
+
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/terragon-labs
+    - icon: fontawesome/brands/docker
+      link: https://hub.docker.com/u/terragonlabs
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX

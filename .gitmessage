@@ -1,0 +1,38 @@
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+#
+# Type should be one of the following:
+# * feat: A new feature
+# * fix: A bug fix
+# * docs: Documentation only changes
+# * style: Changes that do not affect the meaning of the code
+# * refactor: A code change that neither fixes a bug nor adds a feature
+# * perf: A code change that improves performance
+# * test: Adding missing tests or correcting existing tests
+# * build: Changes that affect the build system or external dependencies
+# * ci: Changes to our CI configuration files and scripts
+# * chore: Other changes that don't modify src or test files
+# * revert: Reverts a previous commit
+#
+# Scope should be noun describing a section of the codebase
+# Subject should use imperative mood and not end with period
+# Body should include motivation for the change and contrast with previous behavior
+# Footer should contain any BREAKING CHANGES and reference GitHub issues
+#
+# Examples:
+# feat(agents): add support for vector memory search
+# fix(etl): handle connection timeouts in data extraction
+# docs(api): update agent coordination examples
+# style(core): format code according to ruff standards
+# refactor(monitoring): extract metrics collection to separate module
+# perf(query): optimize database connection pooling
+# test(integration): add end-to-end pipeline tests
+# build(deps): update langchain to version 0.1.5
+# ci(workflows): add security scanning to PR checks
+# chore(cleanup): remove deprecated configuration files
+#
+# BREAKING CHANGE: describe any breaking changes
+# Closes #123, #456
