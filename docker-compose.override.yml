@@ -1,0 +1,93 @@
+# Docker Compose override for local development
+# =============================================================================
+# This file extends docker-compose.yml with development-specific settings
+# Use: docker-compose up (automatically includes override)
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      target: development
+    environment:
+      - DEBUG=true
+      - HOT_RELOAD=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./docs:/app/docs
+      - ./scripts:/app/scripts
+      - ./.env:/app/.env
+    ports:
+      - "5678:5678"  # Debug port
+    command: >
+      bash -c "
+        pip install debugpy &&
+        python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m agent_orchestrated_etl.cli --help ||
+        tail -f /dev/null
+      "
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    command: >
+      postgres -c log_statement=all -c log_destination=stderr
+
+  redis:
+    command: >
+      redis-server --appendonly yes --appendfsync everysec --save 60 1000
+
+  # Additional development services
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: agent-etl-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - agent-etl-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: agent-etl-minio
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    volumes:
+      - minio_data:/data
+    networks:
+      - agent-etl-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio-setup:
+    image: minio/mc:latest
+    container_name: agent-etl-minio-setup
+    depends_on:
+      - minio
+    networks:
+      - agent-etl-network
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc alias set myminio http://minio:9000 admin password123;
+      /usr/bin/mc mb myminio/dev-bucket;
+      /usr/bin/mc policy set public myminio/dev-bucket;
+      /usr/bin/mc mb myminio/test-bucket;
+      /usr/bin/mc policy set public myminio/test-bucket;
+      exit 0;
+      "
+
+volumes:
+  minio_data:
+    driver: local

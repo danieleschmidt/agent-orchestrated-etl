@@ -203,7 +203,12 @@ cython_debug/
 .env.*.local
 
 # IDE and editor files
+# VSCode settings - keep shared configurations
 .vscode/
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo

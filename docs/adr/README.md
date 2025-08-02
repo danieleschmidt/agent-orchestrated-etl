@@ -21,10 +21,10 @@ We use the format described by Michael Nygard in his article:
 | ADR | Title | Status |
 |-----|-------|--------|
 | [ADR-001](001-agent-framework-selection.md) | Agent Framework Selection | Accepted |
-| [ADR-002](002-workflow-engine-choice.md) | Workflow Engine Choice | Accepted |
-| [ADR-003](003-configuration-management.md) | Configuration Management Strategy | Accepted |
-| [ADR-004](004-monitoring-approach.md) | Monitoring and Observability Approach | Accepted |
-| [ADR-005](005-security-architecture.md) | Security Architecture | Accepted |
+| [ADR-002](002-workflow-engine-choice.md) | Workflow Engine Choice | Proposed |
+| [ADR-003](003-configuration-management.md) | Configuration Management Strategy | Proposed |
+| [ADR-004](004-monitoring-approach.md) | Monitoring and Observability Approach | Proposed |
+| [ADR-005](005-security-architecture.md) | Security Architecture | Proposed |
 
 ## Creating a New ADR
 
