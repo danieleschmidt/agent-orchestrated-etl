@@ -1,0 +1,134 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug ETL Pipeline",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/agent_orchestrated_etl/cli.py",
+      "args": [
+        "run_pipeline",
+        "s3",
+        "--output",
+        "debug_results.json",
+        "--monitor",
+        "debug_events.log"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "stopOnEntry": false,
+      "python": "${workspaceFolder}/venv/bin/python"
+    },
+    {
+      "name": "Debug Agent Orchestrator",
+      "type": "python",
+      "request": "launch",
+      "module": "agent_orchestrated_etl.orchestrator",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "args": ["--debug", "--config", "config/development.yaml"]
+    },
+    {
+      "name": "Debug Tests",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/",
+        "-v",
+        "--tb=short",
+        "--capture=no"
+      ],
+      "envFile": "${workspaceFolder}/.env.test",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "python": "${workspaceFolder}/venv/bin/python"
+    },
+    {
+      "name": "Debug Specific Test",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${file}",
+        "-v",
+        "--tb=short",
+        "--capture=no"
+      ],
+      "envFile": "${workspaceFolder}/.env.test",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "python": "${workspaceFolder}/venv/bin/python"
+    },
+    {
+      "name": "Debug DAG Generation",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/agent_orchestrated_etl/cli.py",
+      "args": [
+        "generate_dag",
+        "s3",
+        "debug_dag.py",
+        "--list-tasks"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "python": "${workspaceFolder}/venv/bin/python"
+    },
+    {
+      "name": "Debug API Server",
+      "type": "python",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "agent_orchestrated_etl.api_endpoints:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--reload",
+        "--log-level",
+        "debug"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "python": "${workspaceFolder}/venv/bin/python"
+    },
+    {
+      "name": "Attach to Running Process",
+      "type": "python",
+      "request": "attach",
+      "port": 5678,
+      "host": "localhost",
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/app"
+        }
+      ]
+    },
+    {
+      "name": "Debug Docker Container",
+      "type": "python",
+      "request": "attach",
+      "port": 5678,
+      "host": "0.0.0.0",
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/app"
+        }
+      ]
+    }
+  ]
+}

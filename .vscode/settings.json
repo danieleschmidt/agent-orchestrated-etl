@@ -1,0 +1,164 @@
+{
+  "python.defaultInterpreterPath": "./venv/bin/python",
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.inlayHints.variableTypes": true,
+  
+  // Linting and Formatting
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": false,
+  "python.linting.mypyEnabled": true,
+  "python.formatting.provider": "black",
+  "python.linting.banditEnabled": true,
+  
+  // Testing
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests",
+    "-v",
+    "--tb=short"
+  ],
+  
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true,
+    "source.fixAll": true
+  },
+  "editor.rulers": [88],
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  
+  // Language-specific settings
+  "[python]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true,
+      "source.fixAll.ruff": true
+    }
+  },
+  "[yaml]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.autoIndent": "advanced"
+  },
+  "[json]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[markdown]": {
+    "editor.wordWrap": "on",
+    "editor.quickSuggestions": false,
+    "files.trimTrailingWhitespace": false
+  },
+  "[dockerfile]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+  "[makefile]": {
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false
+  },
+  
+  // File associations
+  "files.associations": {
+    "*.yml": "yaml",
+    "*.yaml": "yaml",
+    "Dockerfile*": "dockerfile",
+    ".env*": "properties",
+    "*.toml": "toml"
+  },
+  
+  // Git settings
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+  "git.autofetch": true,
+  
+  // Search and exclude settings
+  "search.exclude": {
+    "**/.git": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/node_modules": true,
+    "**/venv": true,
+    "**/.venv": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/*.egg-info": true,
+    "**/__pycache__": true,
+    "**/htmlcov": true,
+    "**/.coverage": true
+  },
+  
+  // File watching
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.venv/**": true,
+    "**/venv/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.ruff_cache/**": true
+  },
+  
+  // Extensions settings
+  "ruff.args": ["--config=pyproject.toml"],
+  "mypy-type-checker.args": ["--config-file=mypy.ini"],
+  "black-formatter.args": ["--line-length=88"],
+  
+  // Docker and containers
+  "docker.showStartPage": false,
+  "remote.containers.defaultExtensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.mypy-type-checker",
+    "ms-python.black-formatter",
+    "charliermarsh.ruff",
+    "ms-python.isort"
+  ],
+  
+  // Terminal settings
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.scrollback": 10000,
+  
+  // Workspace trust
+  "security.workspace.trust.untrustedFiles": "open",
+  
+  // Auto-save
+  "files.autoSave": "onFocusChange",
+  "files.autoSaveDelay": 1000,
+  
+  // Intellisense
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": false,
+    "strings": true
+  },
+  "editor.suggest.insertMode": "replace",
+  "editor.acceptSuggestionOnCommitCharacter": false,
+  
+  // GitHub integration
+  "github.gitProtocol": "https",
+  "gitlens.defaultDateFormat": "YYYY-MM-DD HH:mm:ss",
+  "gitlens.blame.avatars": true,
+  "gitlens.blame.compact": true,
+  
+  // Performance optimizations
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.indexing": true,
+  "python.analysis.packageIndexDepths": [
+    {"name": "sklearn", "depth": 2},
+    {"name": "matplotlib", "depth": 2},
+    {"name": "scipy", "depth": 2}
+  ]
+}

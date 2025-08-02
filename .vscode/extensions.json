@@ -1,0 +1,36 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.mypy-type-checker",
+    "ms-python.black-formatter",
+    "charliermarsh.ruff",
+    "ms-python.isort",
+    "ms-python.flake8",
+    "redhat.vscode-yaml",
+    "ms-vscode.vscode-json",
+    "eamodio.gitlens",
+    "GitHub.vscode-pull-request-github",
+    "ms-vscode.makefile-tools",
+    "ms-azuretools.vscode-docker",
+    "timonwong.shellcheck",
+    "foxundermoon.shell-format",
+    "tamasfe.even-better-toml",
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint",
+    "github.vscode-github-actions",
+    "ms-vscode.test-adapter-converter",
+    "littlefoxteam.vscode-python-test-adapter",
+    "njpwerner.autodocstring",
+    "sourcery.sourcery",
+    "ms-python.pylint",
+    "kevinrose.vsc-python-indent",
+    "wholroyd.jinja",
+    "samuelcolvin.jinjahtml",
+    "batisteo.vscode-django",
+    "ms-python.debugpy"
+  ],
+  "unwantedRecommendations": [
+    "ms-python.pylint"
+  ]
+}
