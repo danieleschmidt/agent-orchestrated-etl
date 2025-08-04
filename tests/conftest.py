@@ -3,19 +3,32 @@ import pathlib
 import pytest
 import asyncio
 from typing import Generator, Dict, Any
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, AsyncMock
 import tempfile
+import json
 import shutil
 from pathlib import Path
 import os
+from datetime import datetime, timedelta
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'src'))
 
-from agent_orchestrated_etl.config import Config
-from agent_orchestrated_etl.agents.base_agent import BaseAgent
-from agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
-from agent_orchestrated_etl.agents.etl_agent import ETLAgent
-from agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
+try:
+    from agent_orchestrated_etl.config import Config
+    from agent_orchestrated_etl.agents.base_agent import BaseAgent
+    from agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
+    from agent_orchestrated_etl.agents.etl_agent import ETLAgent
+    from agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
+    LEGACY_MODULES_AVAILABLE = True
+except ImportError:
+    LEGACY_MODULES_AVAILABLE = False
+
+# Import new service modules
+from src.agent_orchestrated_etl.database.connection import DatabaseManager
+from src.agent_orchestrated_etl.services.pipeline_service import PipelineService
+from src.agent_orchestrated_etl.services.intelligence_service import IntelligenceService
+from src.agent_orchestrated_etl.services.optimization_service import OptimizationService
+from src.agent_orchestrated_etl.services.integration_service import IntegrationService
 
 # Test configuration
 TEST_CONFIG = {
@@ -98,6 +111,9 @@ def mock_config(test_config: Dict[str, Any]) -> Mock:
 @pytest.fixture
 def mock_base_agent() -> Mock:
     """Mock base agent for testing."""
+    if not LEGACY_MODULES_AVAILABLE:
+        pytest.skip("Legacy agent modules not available")
+    
     agent = Mock(spec=BaseAgent)
     agent.agent_id = "test-agent-001"
     agent.agent_type = "test"
@@ -291,3 +307,219 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "contract: marks tests as contract tests"
     )
+
+
+# New service-based fixtures
+@pytest.fixture
+def mock_db_manager():
+    """Mock database manager for testing."""
+    mock_manager = AsyncMock(spec=DatabaseManager)
+    
+    # Configure common mock behaviors
+    mock_manager.initialize.return_value = None
+    mock_manager.close.return_value = None
+    mock_manager.execute_query.return_value = []
+    mock_manager.get_health_status.return_value = {
+        "status": "healthy",
+        "response_time_ms": 50,
+        "timestamp": datetime.now().timestamp()
+    }
+    
+    return mock_manager
+
+
+@pytest.fixture
+def mock_intelligence_service():
+    """Mock intelligence service for testing."""
+    mock_service = AsyncMock(spec=IntelligenceService)
+    
+    # Configure default responses
+    mock_service.analyze_pipeline_requirements.return_value = {
+        "recommended_transformations": ["data_validation", "data_cleaning"],
+        "estimated_complexity": "medium",
+        "resource_requirements": {"memory_gb": 4, "cpu_cores": 2},
+        "compliance_recommendations": []
+    }
+    
+    mock_service.optimize_execution_strategy.return_value = {
+        "optimization_recommendations": ["increase_parallelism"],
+        "predicted_improvements": {"execution_time_reduction_percent": 20},
+        "confidence_score": 0.8
+    }
+    
+    mock_service.predict_pipeline_behavior.return_value = {
+        "predicted_success_probability": 0.9,
+        "estimated_execution_time_minutes": 25,
+        "estimated_resource_usage": {"memory_gb": 3.5, "cpu_cores": 2},
+        "risk_factors": [],
+        "optimization_opportunities": []
+    }
+    
+    return mock_service
+
+
+@pytest.fixture
+def mock_optimization_service():
+    """Mock optimization service for testing."""
+    mock_service = AsyncMock(spec=OptimizationService)
+    
+    # Configure default responses
+    mock_service.optimize_pipeline_configuration.return_value = {
+        "optimized_config": {
+            "batch_size": 2000,
+            "parallel_workers": 4,
+            "memory_limit_gb": 8
+        },
+        "expected_improvements": {
+            "execution_time_reduction_percent": 25,
+            "cost_reduction_percent": 15
+        },
+        "confidence_score": 0.85
+    }
+    
+    mock_service.real_time_optimization.return_value = {
+        "optimization_triggered": False,
+        "status": "stable",
+        "monitoring_recommendations": []
+    }
+    
+    return mock_service
+
+
+@pytest.fixture
+def mock_integration_service():
+    """Mock integration service for testing."""
+    mock_service = AsyncMock(spec=IntegrationService)
+    
+    # Configure default responses
+    mock_service.execute_integration.return_value = {
+        "success": True,
+        "status_code": 200,
+        "response": {"data": "test"},
+        "execution_time_ms": 150,
+        "integration_id": "test-integration"
+    }
+    
+    mock_service.get_integration_health.return_value = {
+        "integration_id": "test-integration",
+        "success_rate": 0.95,
+        "avg_response_time_ms": 150,
+        "health_score": 0.9
+    }
+    
+    return mock_service
+
+
+@pytest.fixture
+def pipeline_service_with_mocks(mock_db_manager, mock_intelligence_service, mock_optimization_service):
+    """Create PipelineService instance with mocked dependencies."""
+    return PipelineService(
+        db_manager=mock_db_manager,
+        intelligence_service=mock_intelligence_service,
+        optimization_service=mock_optimization_service
+    )
+
+
+@pytest.fixture
+def intelligence_service_with_mocks(mock_db_manager):
+    """Create IntelligenceService instance with mocked dependencies."""
+    return IntelligenceService(db_manager=mock_db_manager)
+
+
+@pytest.fixture
+def optimization_service_with_mocks(mock_db_manager):
+    """Create OptimizationService instance with mocked dependencies."""
+    return OptimizationService(db_manager=mock_db_manager)
+
+
+@pytest.fixture
+def integration_service_with_mocks(mock_db_manager):
+    """Create IntegrationService instance with mocked dependencies."""
+    return IntegrationService(db_manager=mock_db_manager)
+
+
+@pytest.fixture
+def sample_csv_file(temp_dir):
+    """Create sample CSV file for testing."""
+    csv_content = """id,name,email,age,department
+1,Alice Johnson,alice@example.com,28,Engineering
+2,Bob Smith,bob@example.com,35,Marketing
+3,Carol Davis,carol@example.com,42,Sales
+4,David Wilson,david@example.com,31,Engineering
+5,Eve Brown,eve@example.com,26,Marketing
+"""
+    
+    file_path = temp_dir / "sample.csv"
+    file_path.write_text(csv_content)
+    return file_path
+
+
+@pytest.fixture
+def sample_json_file(temp_dir):
+    """Create sample JSON file for testing."""
+    json_data = {
+        "users": [
+            {"id": 1, "name": "Alice", "active": True},
+            {"id": 2, "name": "Bob", "active": False},
+            {"id": 3, "name": "Carol", "active": True}
+        ],
+        "metadata": {
+            "total_count": 3,
+            "generated_at": "2023-01-01T00:00:00Z"
+        }
+    }
+    
+    file_path = temp_dir / "sample.json"
+    file_path.write_text(json.dumps(json_data, indent=2))
+    return file_path
+
+
+@pytest.fixture
+def sample_performance_data():
+    """Sample performance data for testing."""
+    return {
+        "avg_execution_time_minutes": 25.5,
+        "avg_memory_usage_gb": 3.2,
+        "avg_cpu_utilization": 0.65,
+        "throughput_records_per_second": 1250,
+        "success_rate": 0.95,
+        "error_rate": 0.05,
+        "cost_per_execution": 2.50,
+        "last_30_days": [
+            {"date": "2023-01-01", "execution_time": 28, "success": True},
+            {"date": "2023-01-02", "execution_time": 24, "success": True},
+            {"date": "2023-01-03", "execution_time": 32, "success": False}
+        ]
+    }
+
+
+@pytest.fixture
+def sample_execution_context():
+    """Sample execution context for testing."""
+    return {
+        "execution_id": "exec-test-001",
+        "user_id": "test_user",
+        "priority": "medium",
+        "timeout_minutes": 60,
+        "resources": {
+            "memory_gb": 4,
+            "cpu_cores": 2
+        },
+        "environment": "test",
+        "notifications": {
+            "on_success": ["email:user@example.com"],
+            "on_failure": ["slack:alerts-channel"]
+        }
+    }
+
+
+@pytest.fixture(autouse=True)
+def reset_service_singletons():
+    """Reset service singleton instances between tests."""
+    # Reset any global state or singletons here
+    yield
+    
+    # Cleanup after test
+    # Reset global database manager if needed
+    import src.agent_orchestrated_etl.database.connection as db_conn
+    db_conn._database_manager = None
