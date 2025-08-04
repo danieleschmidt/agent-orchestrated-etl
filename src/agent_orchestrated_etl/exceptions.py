@@ -137,6 +137,10 @@ class ValidationException(AgentETLException):
         return "Invalid input provided. Please check your parameters."
 
 
+# Legacy alias for backward compatibility
+ValidationError = ValidationException
+
+
 # Authentication and Authorization Exceptions
 class AuthenticationException(AgentETLException):
     """Raised when authentication fails."""
