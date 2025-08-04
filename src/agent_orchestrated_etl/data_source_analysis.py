@@ -25,7 +25,7 @@ except ImportError:
     PYARROW_AVAILABLE = False
 
 
-SUPPORTED_SOURCES = {"s3", "postgresql", "api", "test_db", "test_database", "integration_test_db", "test_source"}
+SUPPORTED_SOURCES = {"s3", "postgresql", "api", "test_db", "test_database", "integration_test_db", "test_source", "sample_data", "mock_data"}
 
 # File format detection patterns
 FILE_FORMAT_PATTERNS = {
@@ -734,6 +734,10 @@ def analyze_source(source_type: str, source_uri: Optional[str] = None) -> Dict[s
         # Test database sources for unit/integration testing
         # Provide predictable metadata that tests can rely on
         metadata = {"tables": ["test_table"], "fields": ["test_id", "test_data", "test_timestamp"]}
+    
+    elif normalized in ["sample_data", "mock_data"]:
+        # Sample/mock data sources for demonstration and basic functionality testing
+        metadata = {"tables": ["sample_records"], "fields": ["id", "name", "value", "category"]}
     
     else:
         # This should not happen since we validate supported sources earlier,
