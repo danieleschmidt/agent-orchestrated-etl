@@ -882,9 +882,21 @@ class Pipeline:
 class DataOrchestrator:
     """Enhanced high-level interface to build and run ETL pipelines with resilience."""
 
-    def __init__(self):
+    def __init__(self, enable_quantum_planning: bool = True, enable_adaptive_resources: bool = True):
         """Initialize the data orchestrator."""
         self.logger = get_logger("agent_etl.orchestrator")
+        self.enable_quantum_planning = enable_quantum_planning
+        self.enable_adaptive_resources = enable_adaptive_resources
+        
+        # Initialize quantum and adaptive systems
+        if enable_quantum_planning:
+            from .quantum_planner import QuantumPipelineOrchestrator
+            self.quantum_orchestrator = QuantumPipelineOrchestrator(self)
+        
+        if enable_adaptive_resources:
+            from .adaptive_resources import AdaptiveResourceManager
+            self.resource_manager = AdaptiveResourceManager()
+            self.resource_manager.start_monitoring()
 
     @retry(RetryConfigs.STANDARD)
     @circuit_breaker("data_source_analysis", CircuitBreakerConfigs.EXTERNAL_API)
@@ -1040,8 +1052,43 @@ class DataOrchestrator:
         from .circuit_breaker import circuit_breaker_registry
         from .graceful_degradation import degradation_manager
         
-        return {
+        status = {
             "circuit_breakers": circuit_breaker_registry.get_all_stats(),
             "degradation_services": degradation_manager.get_all_service_status(),
             "logger_name": self.logger.name,
+            "quantum_planning_enabled": self.enable_quantum_planning,
+            "adaptive_resources_enabled": self.enable_adaptive_resources,
         }
+        
+        # Add quantum planning metrics if enabled
+        if self.enable_quantum_planning and hasattr(self, 'quantum_orchestrator'):
+            status["quantum_metrics"] = self.quantum_orchestrator.quantum_planner.get_quantum_metrics()
+        
+        # Add resource management status if enabled
+        if self.enable_adaptive_resources and hasattr(self, 'resource_manager'):
+            status["resource_status"] = self.resource_manager.get_resource_status()
+        
+        return status
+    
+    async def execute_pipeline_async(
+        self,
+        pipeline: Pipeline,
+        monitor: Optional[MonitorAgent] = None,
+        enable_quantum_optimization: bool = None
+    ) -> Dict[str, Any]:
+        """Execute pipeline asynchronously with quantum optimization."""
+        if enable_quantum_optimization is None:
+            enable_quantum_optimization = self.enable_quantum_planning
+        
+        if enable_quantum_optimization and hasattr(self, 'quantum_orchestrator'):
+            return await self.quantum_orchestrator.execute_quantum_pipeline(
+                pipeline, monitor, enable_quantum_optimization
+            )
+        else:
+            # Fallback to synchronous execution
+            return pipeline.execute(monitor)
+    
+    def __del__(self):
+        """Cleanup resources on destruction."""
+        if hasattr(self, 'resource_manager'):
+            self.resource_manager.stop_monitoring()
