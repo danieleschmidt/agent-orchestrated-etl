@@ -57,6 +57,16 @@ def generate_dag_cmd(args: list[str] | None = None) -> int:
         default="generated",
         help="Airflow DAG ID to use in the generated file",
     )
+    parser.add_argument(
+        "--quantum-optimize",
+        action="store_true",
+        help="Use quantum-inspired optimization for task scheduling",
+    )
+    parser.add_argument(
+        "--adaptive-resources",
+        action="store_true",
+        help="Enable adaptive resource management",
+    )
     ns = parser.parse_args(args)
 
     if ns.list_sources:
@@ -136,6 +146,21 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
         action="store_true",
         help="Print tasks in execution order and exit",
     )
+    parser.add_argument(
+        "--quantum-optimize",
+        action="store_true",
+        help="Use quantum-inspired optimization for pipeline execution",
+    )
+    parser.add_argument(
+        "--adaptive-resources",
+        action="store_true",
+        help="Enable adaptive resource management",
+    )
+    parser.add_argument(
+        "--data-quality",
+        action="store_true",
+        help="Run comprehensive data quality analysis",
+    )
     ns = parser.parse_args(args)
 
     if ns.list_sources:
@@ -150,7 +175,10 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
         monitor = orchestrator.MonitorAgent(ns.monitor)
 
     # Source validation is now handled by argparse type function
-    orch = orchestrator.DataOrchestrator()
+    orch = orchestrator.DataOrchestrator(
+        enable_quantum_planning=ns.quantum_optimize,
+        enable_adaptive_resources=ns.adaptive_resources
+    )
     try:
         pipeline = orch.create_pipeline(ns.source, dag_id=ns.dag_id)
     except ValueError as exc:
