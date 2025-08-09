@@ -48,27 +48,83 @@ def primary_data_extraction(*args, **kwargs) -> List[Dict[str, Any]]:
     try:
         if source_type == 'database':
             return _extract_from_database(source_config)
-        elif source_type == 'file':
-            return _extract_from_file(source_config)
-        elif source_type == 's3':
-            return _extract_from_s3(source_config)
         elif source_type == 'api':
             return _extract_from_api(source_config)
+        elif source_type == 's3':
+            return _extract_from_s3(source_config)
+        elif source_type == 'file':
+            return _extract_from_file(source_config)
         else:
             # Default sample data for testing
             return [
-                {"id": 1, "name": "Alice", "value": 100, "category": "A"},
-                {"id": 2, "name": "Bob", "value": 250, "category": "B"},
-                {"id": 3, "name": "Charlie", "value": 300, "category": "A"},
-                {"id": 4, "name": "Diana", "value": 450, "category": "C"},
-                {"id": 5, "name": "Eve", "value": 180, "category": "B"},
+                {"id": 1, "name": "sample_data_1", "value": 100, "category": "test"},
+                {"id": 2, "name": "sample_data_2", "value": 200, "category": "prod"},
+                {"id": 3, "name": "sample_data_3", "value": 300, "category": "dev"}
             ]
+            
     except Exception as e:
-        logger.error(f"Data extraction failed: {e}")
-        raise DataProcessingException(f"Extraction failed: {e}", extraction_source=source_path) from e
+        logger.error(f"Data extraction failed for {source_type}: {str(e)}")
+        raise DataProcessingException(f"Extraction failed: {str(e)}") from e
 
 
-def transform_data(data: Union[List[int], List[Dict[str, Any]]], **kwargs) -> List[Dict[str, Any]]:
+def _extract_from_database(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract data from database sources."""
+    # Implementation for database extraction
+    connection_string = config.get('connection_string', '')
+    query = config.get('query', 'SELECT * FROM default_table LIMIT 100')
+    
+    # Mock database extraction for now
+    return [
+        {"id": 1, "db_field": "value1", "timestamp": time.time()},
+        {"id": 2, "db_field": "value2", "timestamp": time.time()}
+    ]
+
+
+def _extract_from_api(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract data from API endpoints."""
+    endpoint = config.get('endpoint', '')
+    headers = config.get('headers', {})
+    
+    # Mock API extraction
+    return [
+        {"api_id": 1, "response_data": "api_value1", "status": "success"},
+        {"api_id": 2, "response_data": "api_value2", "status": "success"}
+    ]
+
+
+def _extract_from_s3(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract data from S3 buckets."""
+    bucket = config.get('bucket', '')
+    key = config.get('key', '')
+    
+    # Mock S3 extraction
+    return [
+        {"s3_object": "file1.json", "size": 1024, "last_modified": time.time()},
+        {"s3_object": "file2.csv", "size": 2048, "last_modified": time.time()}
+    ]
+
+
+def _extract_from_file(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Extract data from file sources."""
+    file_path = config.get('path', '')
+    file_type = config.get('format', 'json')
+    
+    if Path(file_path).exists():
+        try:
+            if file_type == 'json':
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    return data if isinstance(data, list) else [data]
+            elif file_type == 'csv':
+                df = pd.read_csv(file_path)
+                return df.to_dict('records')
+        except Exception as e:
+            raise DataProcessingException(f"File extraction failed: {str(e)}")
+    
+    return [{"file_data": "mock_file_content", "source": file_path}]
+
+
+def transform_data(data: Union[List[int], List[Dict[str, Any]]], transformation_rules: Optional[List[Dict[str, Any]]] = None, **kwargs) -> List[Dict[str, Any]]:
     """Advanced data transformation with multiple transformation strategies."""
     logger = get_logger("agent_etl.core.transformation")
     
