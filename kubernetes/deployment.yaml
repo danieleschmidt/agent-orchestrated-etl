@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autonomous-sdlc-deployment
+  namespace: autonomous-sdlc
+  labels:
+    app: autonomous-sdlc
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: autonomous-sdlc
+  template:
+    metadata:
+      labels:
+        app: autonomous-sdlc
+    spec:
+      containers:
+      - name: autonomous-sdlc
+        image: autonomous-sdlc:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: redis-url
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5

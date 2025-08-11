@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "自主SDLC",
+    "description": "AI驱动的软件开发生命周期"
+  },
+  "errors": {
+    "validation_failed": "验证失败",
+    "authentication_required": "需要身份验证",
+    "access_denied": "访问被拒绝",
+    "resource_not_found": "资源未找到",
+    "server_error": "内部服务器错误"
+  },
+  "status": {
+    "success": "成功",
+    "pending": "待定",
+    "failed": "失败",
+    "in_progress": "进行中"
+  }
+}

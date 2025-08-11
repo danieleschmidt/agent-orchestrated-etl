@@ -1,0 +1,32 @@
+{
+  "environment": "production",
+  "debug": false,
+  "log_level": "INFO",
+  "database": {
+    "pool_size": 20,
+    "max_overflow": 30
+  },
+  "cache": {
+    "default_timeout": 300,
+    "max_entries": 10000
+  },
+  "security": {
+    "session_timeout": 3600,
+    "max_login_attempts": 5
+  },
+  "i18n": {
+    "default_language": "en",
+    "supported_languages": [
+      "en",
+      "es",
+      "fr",
+      "de",
+      "ja",
+      "zh"
+    ]
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics_endpoint": "/metrics"
+  }
+}
