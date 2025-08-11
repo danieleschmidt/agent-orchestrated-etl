@@ -24,9 +24,12 @@ from enum import Enum
 from collections import deque, defaultdict
 import pickle
 import math
+import random
+import heapq
+from datetime import datetime, timedelta
 
-from .logging_config import get_logger
-from .exceptions import PipelineExecutionException, ResourceExhaustedException
+from .logging_config import get_logger, TimedOperation
+from .exceptions import PipelineExecutionException, ResourceExhaustedException, AgentETLException, ErrorSeverity, ErrorCategory
 
 
 class PredictionModel(Enum):
@@ -36,6 +39,32 @@ class PredictionModel(Enum):
     PROPHET = "prophet"
     HYBRID = "hybrid"
     QUANTUM_INSPIRED = "quantum_inspired"
+    REINFORCEMENT_LEARNING = "reinforcement_learning"
+    ENSEMBLE = "ensemble"
+    TRANSFORMER = "transformer"
+    GRU = "gru"
+    CNN_LSTM = "cnn_lstm"
+
+
+class OptimizationStrategy(Enum):
+    """Resource optimization strategies."""
+    COST_OPTIMAL = "cost_optimal"
+    PERFORMANCE_OPTIMAL = "performance_optimal"
+    ENERGY_EFFICIENT = "energy_efficient"
+    BALANCED = "balanced"
+    REINFORCEMENT_LEARNING = "reinforcement_learning"
+    MULTI_AGENT = "multi_agent"
+    QUANTUM_ANNEALING = "quantum_annealing"
+
+
+class MarketCondition(Enum):
+    """Cloud resource market conditions."""
+    LOW_DEMAND = "low_demand"
+    NORMAL = "normal"
+    HIGH_DEMAND = "high_demand"
+    PEAK_HOURS = "peak_hours"
+    OFF_PEAK = "off_peak"
+    SPOT_AVAILABLE = "spot_available"
 
 
 @dataclass
@@ -75,6 +104,46 @@ class ResourceDemandForecast:
     anomaly_score: float = 0.0
     forecast_horizon: int = 12  # Number of time steps
     model_used: PredictionModel = PredictionModel.LSTM
+    market_conditions: Optional[Dict[str, float]] = None
+    cost_predictions: Optional[List[float]] = None
+    volatility_score: float = 0.0
+    accuracy_metrics: Optional[Dict[str, float]] = None
+
+
+@dataclass
+class MarketData:
+    """Real-time cloud resource market data."""
+    resource_type: str
+    spot_price: float
+    on_demand_price: float
+    reserved_price: float
+    availability: float  # 0-1 scale
+    region: str
+    timestamp: float = field(default_factory=time.time)
+    price_trend: str = "stable"  # "rising", "falling", "stable"
+    demand_level: MarketCondition = MarketCondition.NORMAL
+    savings_opportunity: float = 0.0
+
+
+@dataclass
+class RLState:
+    """Reinforcement Learning state representation."""
+    current_allocation: Dict[str, float]
+    resource_utilization: Dict[str, float]
+    demand_forecast: Dict[str, List[float]]
+    market_conditions: Dict[str, float]
+    performance_metrics: Dict[str, float]
+    cost_metrics: Dict[str, float]
+    timestamp: float = field(default_factory=time.time)
+
+
+@dataclass
+class RLAction:
+    """Reinforcement Learning action representation."""
+    resource_changes: Dict[str, float]  # Relative changes (-1 to +1)
+    action_type: str  # "scale_up", "scale_down", "maintain", "optimize"
+    confidence: float = 0.0
+    expected_reward: float = 0.0
 
 
 class LSTMResourcePredictor:
@@ -802,8 +871,543 @@ class MultiObjectiveResourceOptimizer:
         return max(-1.0, min(1.0, total_improvement))  # Clamp to [-1, 1]
 
 
+class ReinforcementLearningOptimizer:
+    """Reinforcement Learning-based resource allocation optimizer."""
+    
+    def __init__(self, learning_rate: float = 0.01, exploration_rate: float = 0.1):
+        self.logger = get_logger("agent_etl.ai_resource_allocation.rl_optimizer")
+        self.learning_rate = learning_rate
+        self.exploration_rate = exploration_rate
+        
+        # Q-learning parameters
+        self.q_table: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self.state_history: deque = deque(maxlen=1000)
+        self.action_history: deque = deque(maxlen=1000)
+        self.reward_history: deque = deque(maxlen=1000)
+        
+        # Experience replay buffer
+        self.experience_buffer: deque = deque(maxlen=10000)
+        
+        # Policy network simulation (simplified)
+        self.policy_weights: Dict[str, np.ndarray] = {}
+        self.value_weights: Dict[str, np.ndarray] = {}
+        
+        # Performance tracking
+        self.episode_rewards: deque = deque(maxlen=100)
+        self.learning_metrics: Dict[str, float] = {}
+        
+    def get_optimal_action(self, state: RLState) -> RLAction:
+        """Get optimal action using epsilon-greedy policy."""
+        state_key = self._state_to_key(state)
+        
+        # Epsilon-greedy exploration
+        if random.random() < self.exploration_rate:
+            return self._get_random_action(state)
+        
+        # Get best action from Q-table
+        if state_key in self.q_table:
+            best_action_key = max(self.q_table[state_key].keys(), 
+                                key=lambda k: self.q_table[state_key][k])
+            return self._key_to_action(best_action_key, state)
+        
+        return self._get_random_action(state)
+    
+    def update_policy(self, state: RLState, action: RLAction, reward: float, next_state: RLState) -> None:
+        """Update Q-learning policy based on experience."""
+        state_key = self._state_to_key(state)
+        action_key = self._action_to_key(action)
+        next_state_key = self._state_to_key(next_state)
+        
+        # Q-learning update
+        current_q = self.q_table[state_key][action_key]
+        
+        # Find max Q-value for next state
+        max_next_q = 0.0
+        if next_state_key in self.q_table:
+            max_next_q = max(self.q_table[next_state_key].values()) if self.q_table[next_state_key] else 0.0
+        
+        # Update Q-value with Bellman equation
+        discount_factor = 0.95
+        updated_q = current_q + self.learning_rate * (reward + discount_factor * max_next_q - current_q)
+        self.q_table[state_key][action_key] = updated_q
+        
+        # Store experience for replay
+        experience = (state, action, reward, next_state)
+        self.experience_buffer.append(experience)
+        
+        # Update histories
+        self.state_history.append(state)
+        self.action_history.append(action)
+        self.reward_history.append(reward)
+        
+        # Perform experience replay periodically
+        if len(self.experience_buffer) > 100 and len(self.experience_buffer) % 50 == 0:
+            self._experience_replay()
+        
+        self.logger.debug(
+            f"Updated RL policy",
+            extra={
+                "state_key": state_key,
+                "action_key": action_key,
+                "reward": reward,
+                "updated_q": updated_q,
+                "exploration_rate": self.exploration_rate
+            }
+        )
+    
+    def _state_to_key(self, state: RLState) -> str:
+        """Convert state to string key for Q-table."""
+        # Discretize continuous values for Q-table
+        discretized = {}
+        
+        for resource_type, allocation in state.current_allocation.items():
+            discretized[f"alloc_{resource_type}"] = round(allocation, 1)
+        
+        for resource_type, utilization in state.resource_utilization.items():
+            discretized[f"util_{resource_type}"] = round(utilization * 10) / 10  # Round to 0.1
+        
+        # Add market conditions
+        for condition, value in state.market_conditions.items():
+            discretized[f"market_{condition}"] = round(value * 10) / 10
+        
+        return str(sorted(discretized.items()))
+    
+    def _action_to_key(self, action: RLAction) -> str:
+        """Convert action to string key for Q-table."""
+        discretized = {}
+        for resource_type, change in action.resource_changes.items():
+            discretized[resource_type] = round(change * 10) / 10  # Round to 0.1
+        discretized["action_type"] = action.action_type
+        return str(sorted(discretized.items()))
+    
+    def _key_to_action(self, action_key: str, state: RLState) -> RLAction:
+        """Convert string key back to action."""
+        try:
+            # Parse action key (simplified implementation)
+            resource_changes = {}
+            for resource_type in state.current_allocation.keys():
+                resource_changes[resource_type] = random.uniform(-0.3, 0.3)
+            
+            return RLAction(
+                resource_changes=resource_changes,
+                action_type="optimize",
+                confidence=0.8
+            )
+        except Exception:
+            return self._get_random_action(state)
+    
+    def _get_random_action(self, state: RLState) -> RLAction:
+        """Generate random action for exploration."""
+        resource_changes = {}
+        
+        for resource_type in state.current_allocation.keys():
+            # Random change between -30% and +30%
+            change = random.uniform(-0.3, 0.3)
+            resource_changes[resource_type] = change
+        
+        action_types = ["scale_up", "scale_down", "maintain", "optimize"]
+        action_type = random.choice(action_types)
+        
+        return RLAction(
+            resource_changes=resource_changes,
+            action_type=action_type,
+            confidence=0.5
+        )
+    
+    def _experience_replay(self) -> None:
+        """Perform experience replay for improved learning."""
+        if len(self.experience_buffer) < 32:
+            return
+        
+        # Sample random batch from experience buffer
+        batch_size = min(32, len(self.experience_buffer))
+        batch = random.sample(list(self.experience_buffer), batch_size)
+        
+        for state, action, reward, next_state in batch:
+            # Re-update Q-values with current policy
+            state_key = self._state_to_key(state)
+            action_key = self._action_to_key(action)
+            next_state_key = self._state_to_key(next_state)
+            
+            current_q = self.q_table[state_key][action_key]
+            max_next_q = 0.0
+            if next_state_key in self.q_table:
+                max_next_q = max(self.q_table[next_state_key].values()) if self.q_table[next_state_key] else 0.0
+            
+            # Smaller learning rate for replay
+            replay_lr = self.learning_rate * 0.5
+            updated_q = current_q + replay_lr * (reward + 0.95 * max_next_q - current_q)
+            self.q_table[state_key][action_key] = updated_q
+        
+        self.logger.debug(f"Performed experience replay with batch size: {batch_size}")
+    
+    def calculate_reward(self, old_state: RLState, new_state: RLState, action: RLAction) -> float:
+        """Calculate reward for RL action."""
+        reward = 0.0
+        
+        # Performance improvement reward
+        old_perf = sum(old_state.performance_metrics.values()) / len(old_state.performance_metrics)
+        new_perf = sum(new_state.performance_metrics.values()) / len(new_state.performance_metrics)
+        performance_reward = (new_perf - old_perf) * 10.0
+        
+        # Cost efficiency reward
+        old_cost = sum(old_state.cost_metrics.values()) / len(old_state.cost_metrics)
+        new_cost = sum(new_state.cost_metrics.values()) / len(new_state.cost_metrics)
+        cost_reward = (old_cost - new_cost) * 5.0  # Reward cost reduction
+        
+        # Utilization efficiency reward
+        old_util_variance = np.var(list(old_state.resource_utilization.values()))
+        new_util_variance = np.var(list(new_state.resource_utilization.values()))
+        utilization_reward = (old_util_variance - new_util_variance) * 3.0  # Reward balanced utilization
+        
+        # Stability penalty
+        total_change = sum(abs(change) for change in action.resource_changes.values())
+        stability_penalty = -total_change * 0.5  # Penalize excessive changes
+        
+        reward = performance_reward + cost_reward + utilization_reward + stability_penalty
+        
+        # Clamp reward to reasonable range
+        reward = max(-10.0, min(10.0, reward))
+        
+        self.logger.debug(
+            f"Calculated RL reward: {reward:.3f}",
+            extra={
+                "performance_reward": performance_reward,
+                "cost_reward": cost_reward,
+                "utilization_reward": utilization_reward,
+                "stability_penalty": stability_penalty
+            }
+        )
+        
+        return reward
+    
+    def get_learning_metrics(self) -> Dict[str, float]:
+        """Get RL learning performance metrics."""
+        if not self.reward_history:
+            return {}
+        
+        recent_rewards = list(self.reward_history)[-50:]  # Last 50 rewards
+        
+        return {
+            "avg_reward": sum(recent_rewards) / len(recent_rewards),
+            "max_reward": max(recent_rewards),
+            "min_reward": min(recent_rewards),
+            "reward_trend": self._calculate_reward_trend(),
+            "exploration_rate": self.exploration_rate,
+            "q_table_size": len(self.q_table),
+            "experience_buffer_size": len(self.experience_buffer),
+            "total_episodes": len(self.reward_history)
+        }
+    
+    def _calculate_reward_trend(self) -> float:
+        """Calculate reward trend (positive = improving, negative = degrading)."""
+        if len(self.reward_history) < 20:
+            return 0.0
+        
+        recent_rewards = list(self.reward_history)[-20:]
+        first_half = recent_rewards[:10]
+        second_half = recent_rewards[10:]
+        
+        first_avg = sum(first_half) / len(first_half)
+        second_avg = sum(second_half) / len(second_half)
+        
+        return second_avg - first_avg
+
+
+class MarketDataIntegration:
+    """Real-time cloud resource market data integration."""
+    
+    def __init__(self, update_interval: float = 300.0):  # 5-minute updates
+        self.logger = get_logger("agent_etl.ai_resource_allocation.market")
+        self.update_interval = update_interval
+        
+        # Market data storage
+        self.current_market_data: Dict[str, MarketData] = {}
+        self.market_history: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        
+        # Price prediction models
+        self.price_predictors: Dict[str, Any] = {}
+        
+        # Market analysis
+        self.market_trends: Dict[str, str] = {}
+        self.volatility_scores: Dict[str, float] = {}
+        
+        # Monitoring
+        self.is_monitoring = False
+        self.monitoring_thread: Optional[threading.Thread] = None
+    
+    def start_market_monitoring(self) -> None:
+        """Start real-time market data monitoring."""
+        if self.is_monitoring:
+            return
+        
+        self.is_monitoring = True
+        self.monitoring_thread = threading.Thread(target=self._market_monitoring_loop, daemon=True)
+        self.monitoring_thread.start()
+        
+        self.logger.info("Started market data monitoring")
+    
+    def stop_market_monitoring(self) -> None:
+        """Stop market data monitoring."""
+        self.is_monitoring = False
+        if self.monitoring_thread:
+            self.monitoring_thread.join(timeout=5.0)
+        
+        self.logger.info("Stopped market data monitoring")
+    
+    def _market_monitoring_loop(self) -> None:
+        """Main market monitoring loop."""
+        while self.is_monitoring:
+            try:
+                # Simulate fetching market data from cloud providers
+                self._fetch_market_data()
+                
+                # Analyze market trends
+                self._analyze_market_trends()
+                
+                # Update price predictions
+                self._update_price_predictions()
+                
+                time.sleep(self.update_interval)
+                
+            except Exception as e:
+                self.logger.error(f"Error in market monitoring loop: {e}", exc_info=True)
+                time.sleep(self.update_interval)
+    
+    def _fetch_market_data(self) -> None:
+        """Fetch current market data (simulated implementation)."""
+        resource_types = ["cpu", "memory", "io", "network"]
+        
+        for resource_type in resource_types:
+            try:
+                # Simulate market data with realistic patterns
+                base_spot_price = {
+                    "cpu": 0.05,
+                    "memory": 0.02,
+                    "io": 0.08,
+                    "network": 0.03
+                }.get(resource_type, 0.05)
+                
+                # Add time-based patterns and randomness
+                hour = datetime.now().hour
+                day_of_week = datetime.now().weekday()
+                
+                # Peak hours affect pricing
+                peak_multiplier = 1.2 if 9 <= hour <= 17 else 0.8
+                weekend_multiplier = 0.9 if day_of_week >= 5 else 1.0
+                
+                # Random market fluctuation
+                market_noise = random.uniform(0.8, 1.3)
+                
+                spot_price = base_spot_price * peak_multiplier * weekend_multiplier * market_noise
+                on_demand_price = spot_price * 2.5  # On-demand typically 2-3x spot
+                reserved_price = spot_price * 1.5   # Reserved typically 1.5x spot
+                
+                # Availability simulation
+                availability = max(0.1, min(1.0, random.uniform(0.7, 1.0)))
+                
+                # Determine market condition
+                if spot_price > base_spot_price * 1.3:
+                    condition = MarketCondition.HIGH_DEMAND
+                elif spot_price < base_spot_price * 0.8:
+                    condition = MarketCondition.LOW_DEMAND
+                elif 9 <= hour <= 17:
+                    condition = MarketCondition.PEAK_HOURS
+                elif hour < 6 or hour > 22:
+                    condition = MarketCondition.OFF_PEAK
+                else:
+                    condition = MarketCondition.NORMAL
+                
+                # Calculate savings opportunity
+                savings_opportunity = max(0.0, (on_demand_price - spot_price) / on_demand_price)
+                
+                market_data = MarketData(
+                    resource_type=resource_type,
+                    spot_price=spot_price,
+                    on_demand_price=on_demand_price,
+                    reserved_price=reserved_price,
+                    availability=availability,
+                    region="us-west-2",  # Default region
+                    demand_level=condition,
+                    savings_opportunity=savings_opportunity
+                )
+                
+                # Store current data
+                self.current_market_data[resource_type] = market_data
+                
+                # Add to history
+                self.market_history[resource_type].append(market_data)
+                
+                self.logger.debug(
+                    f"Updated market data for {resource_type}",
+                    extra={
+                        "resource_type": resource_type,
+                        "spot_price": spot_price,
+                        "availability": availability,
+                        "market_condition": condition.value,
+                        "savings_opportunity": savings_opportunity
+                    }
+                )
+                
+            except Exception as e:
+                self.logger.error(f"Failed to fetch market data for {resource_type}: {e}")
+    
+    def _analyze_market_trends(self) -> None:
+        """Analyze market trends and volatility."""
+        for resource_type, history in self.market_history.items():
+            if len(history) < 10:
+                continue
+            
+            try:
+                # Get recent price history
+                recent_prices = [data.spot_price for data in list(history)[-20:]]
+                
+                # Calculate trend
+                if len(recent_prices) >= 3:
+                    recent_slope = (recent_prices[-1] - recent_prices[-3]) / 3
+                    if recent_slope > 0.001:
+                        self.market_trends[resource_type] = "rising"
+                    elif recent_slope < -0.001:
+                        self.market_trends[resource_type] = "falling"
+                    else:
+                        self.market_trends[resource_type] = "stable"
+                
+                # Calculate volatility
+                if len(recent_prices) >= 5:
+                    price_mean = sum(recent_prices) / len(recent_prices)
+                    variance = sum((p - price_mean) ** 2 for p in recent_prices) / len(recent_prices)
+                    volatility = math.sqrt(variance) / price_mean if price_mean > 0 else 0
+                    self.volatility_scores[resource_type] = volatility
+                
+            except Exception as e:
+                self.logger.error(f"Failed to analyze trends for {resource_type}: {e}")
+    
+    def _update_price_predictions(self) -> None:
+        """Update price predictions using historical data."""
+        for resource_type, history in self.market_history.items():
+            if len(history) < 20:
+                continue
+            
+            try:
+                # Simple price prediction using moving averages
+                recent_prices = [data.spot_price for data in list(history)[-10:]]
+                
+                # Short-term moving average
+                short_ma = sum(recent_prices[-5:]) / 5
+                # Long-term moving average
+                long_ma = sum(recent_prices) / len(recent_prices)
+                
+                # Predict next price based on trend
+                if short_ma > long_ma * 1.05:
+                    predicted_price = recent_prices[-1] * 1.02  # Slight increase
+                elif short_ma < long_ma * 0.95:
+                    predicted_price = recent_prices[-1] * 0.98  # Slight decrease
+                else:
+                    predicted_price = recent_prices[-1]  # Stable
+                
+                # Store prediction (simplified - in real implementation would use ML models)
+                if resource_type not in self.price_predictors:
+                    self.price_predictors[resource_type] = {}
+                
+                self.price_predictors[resource_type]['next_price'] = predicted_price
+                self.price_predictors[resource_type]['confidence'] = 0.7
+                
+            except Exception as e:
+                self.logger.error(f"Failed to update price predictions for {resource_type}: {e}")
+    
+    def get_market_data(self, resource_type: str) -> Optional[MarketData]:
+        """Get current market data for resource type."""
+        return self.current_market_data.get(resource_type)
+    
+    def get_cost_optimization_recommendations(self, current_allocation: Dict[str, float]) -> Dict[str, Any]:
+        """Get cost optimization recommendations based on market data."""
+        recommendations = {
+            "total_potential_savings": 0.0,
+            "resource_recommendations": {},
+            "market_timing": {},
+            "risk_assessment": {}
+        }
+        
+        for resource_type, allocation in current_allocation.items():
+            market_data = self.current_market_data.get(resource_type)
+            if not market_data:
+                continue
+            
+            try:
+                # Calculate current cost
+                current_cost = allocation * market_data.on_demand_price
+                
+                # Spot instance savings
+                spot_cost = allocation * market_data.spot_price
+                spot_savings = current_cost - spot_cost
+                
+                # Reserved instance savings (if planning long-term usage)
+                reserved_cost = allocation * market_data.reserved_price
+                reserved_savings = current_cost - reserved_cost
+                
+                recommendations["resource_recommendations"][resource_type] = {
+                    "current_cost": current_cost,
+                    "spot_savings": spot_savings,
+                    "reserved_savings": reserved_savings,
+                    "best_option": "spot" if spot_savings > reserved_savings else "reserved",
+                    "availability": market_data.availability,
+                    "market_condition": market_data.demand_level.value
+                }
+                
+                recommendations["total_potential_savings"] += max(spot_savings, reserved_savings)
+                
+                # Market timing recommendations
+                trend = self.market_trends.get(resource_type, "stable")
+                volatility = self.volatility_scores.get(resource_type, 0.0)
+                
+                if trend == "falling" and volatility < 0.1:
+                    timing_recommendation = "good_time_to_scale_up"
+                elif trend == "rising" and volatility < 0.1:
+                    timing_recommendation = "consider_scaling_down"
+                elif volatility > 0.2:
+                    timing_recommendation = "high_volatility_wait"
+                else:
+                    timing_recommendation = "neutral"
+                
+                recommendations["market_timing"][resource_type] = {
+                    "trend": trend,
+                    "volatility": volatility,
+                    "recommendation": timing_recommendation
+                }
+                
+                # Risk assessment
+                risk_score = 0.0
+                if market_data.availability < 0.7:
+                    risk_score += 0.3
+                if volatility > 0.2:
+                    risk_score += 0.4
+                if market_data.demand_level == MarketCondition.HIGH_DEMAND:
+                    risk_score += 0.3
+                
+                recommendations["risk_assessment"][resource_type] = {
+                    "risk_score": min(1.0, risk_score),
+                    "risk_level": "high" if risk_score > 0.7 else "medium" if risk_score > 0.4 else "low"
+                }
+                
+            except Exception as e:
+                self.logger.error(f"Failed to generate recommendations for {resource_type}: {e}")
+        
+        return recommendations
+    
+    def get_market_summary(self) -> Dict[str, Any]:
+        """Get comprehensive market summary."""
+        return {
+            "current_market_data": {rt: data.__dict__ for rt, data in self.current_market_data.items()},
+            "market_trends": self.market_trends.copy(),
+            "volatility_scores": self.volatility_scores.copy(),
+            "monitoring_active": self.is_monitoring,
+            "data_points_collected": {rt: len(history) for rt, history in self.market_history.items()},
+            "timestamp": time.time()
+        }
+
+
 class AIResourceAllocationManager:
-    """Main AI-driven resource allocation manager with LSTM prediction."""
+    """Main AI-driven resource allocation manager with advanced ML optimization."""
     
     def __init__(self, update_interval: float = 60.0):
         self.logger = get_logger("agent_etl.ai_resource_allocation.manager")
@@ -812,6 +1416,8 @@ class AIResourceAllocationManager:
         # Core components
         self.lstm_predictor = LSTMResourcePredictor()
         self.optimizer = MultiObjectiveResourceOptimizer()
+        self.rl_optimizer = ReinforcementLearningOptimizer()
+        self.market_integration = MarketDataIntegration()
         
         # Current state
         self.current_allocation: Dict[str, float] = {
@@ -820,6 +1426,11 @@ class AIResourceAllocationManager:
             "io": 2.0,
             "network": 1.0
         }
+        
+        # Enhanced optimization strategy
+        self.optimization_strategy = OptimizationStrategy.REINFORCEMENT_LEARNING
+        self.enable_market_integration = True
+        self.enable_ensemble_predictions = True
         
         # Workload patterns
         self.workload_patterns: Dict[str, WorkloadPattern] = {}

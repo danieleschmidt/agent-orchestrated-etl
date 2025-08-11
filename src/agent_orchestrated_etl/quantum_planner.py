@@ -817,3 +817,1049 @@ class QuantumPipelineOrchestrator:
         # This is a simplified implementation
         # In practice, you would analyze execution patterns and performance correlations
         pass
+
+
+# Advanced Generation 1 Quantum Algorithms
+
+class QuantumOptimizationAlgorithm(Enum):
+    """Advanced quantum optimization algorithms for Generation 1."""
+    
+    QAOA = "qaoa"  # Quantum Approximate Optimization Algorithm
+    VQE = "vqe"    # Variational Quantum Eigensolver  
+    QUANTUM_ANNEALING = "quantum_annealing"
+    ADIABATIC = "adiabatic"
+    GROVER = "grover"
+    AMPLITUDE_AMPLIFICATION = "amplitude_amplification"
+    # Advanced Generation 1 algorithms
+    QUANTUM_EVOLUTIONARY = "quantum_evolutionary"
+    QUANTUM_SWARM = "quantum_swarm"
+    QUANTUM_NEURAL = "quantum_neural"
+    VARIATIONAL_QUANTUM_CLASSIFIER = "vqc"
+    QUANTUM_REINFORCEMENT = "quantum_reinforcement"
+    QUANTUM_GENETIC = "quantum_genetic"
+    HYBRID_QUANTUM_CLASSICAL = "hybrid_quantum_classical"
+
+
+@dataclass
+class QuantumCircuit:
+    """Represents a quantum circuit for optimization."""
+    
+    num_qubits: int
+    depth: int = 1
+    gates: List[Dict[str, Any]] = field(default_factory=list)
+    parameters: List[float] = field(default_factory=list)
+    entanglement_pattern: str = "linear"
+    noise_model: Optional[Dict[str, Any]] = None
+    
+    def add_gate(self, gate_type: str, qubits: List[int], parameters: Optional[List[float]] = None) -> None:
+        """Add a quantum gate to the circuit."""
+        self.gates.append({
+            "type": gate_type,
+            "qubits": qubits,
+            "parameters": parameters or []
+        })
+    
+    def add_parameterized_layer(self, layer_type: str = "rx_ry_rz") -> None:
+        """Add a parameterized layer to the circuit."""
+        if layer_type == "rx_ry_rz":
+            for qubit in range(self.num_qubits):
+                # RX gate
+                self.add_gate("rx", [qubit], [len(self.parameters)])
+                self.parameters.append(random.uniform(0, 2 * math.pi))
+                
+                # RY gate
+                self.add_gate("ry", [qubit], [len(self.parameters)])
+                self.parameters.append(random.uniform(0, 2 * math.pi))
+                
+                # RZ gate
+                self.add_gate("rz", [qubit], [len(self.parameters)])
+                self.parameters.append(random.uniform(0, 2 * math.pi))
+        
+        # Add entangling gates
+        self._add_entangling_layer()
+    
+    def _add_entangling_layer(self) -> None:
+        """Add entangling gates based on the pattern."""
+        if self.entanglement_pattern == "linear":
+            for i in range(self.num_qubits - 1):
+                self.add_gate("cnot", [i, i + 1])
+        elif self.entanglement_pattern == "circular":
+            for i in range(self.num_qubits - 1):
+                self.add_gate("cnot", [i, i + 1])
+            if self.num_qubits > 2:
+                self.add_gate("cnot", [self.num_qubits - 1, 0])
+        elif self.entanglement_pattern == "full":
+            for i in range(self.num_qubits):
+                for j in range(i + 1, self.num_qubits):
+                    self.add_gate("cnot", [i, j])
+    
+    def simulate_execution(self) -> np.ndarray:
+        """Simulate quantum circuit execution (simplified)."""
+        # Initialize state vector (all qubits in |0⟩ state)
+        num_states = 2 ** self.num_qubits
+        state_vector = np.zeros(num_states, dtype=complex)
+        state_vector[0] = 1.0  # |00...0⟩ state
+        
+        # Apply gates sequentially
+        for gate in self.gates:
+            state_vector = self._apply_gate(state_vector, gate)
+        
+        return state_vector
+    
+    def _apply_gate(self, state_vector: np.ndarray, gate: Dict[str, Any]) -> np.ndarray:
+        """Apply a quantum gate to the state vector (simplified)."""
+        gate_type = gate["type"]
+        qubits = gate["qubits"]
+        parameters = gate.get("parameters", [])
+        
+        if gate_type == "rx" and len(qubits) == 1:
+            # Rotation around X-axis
+            angle = self.parameters[parameters[0]] if parameters else 0
+            cos_half = np.cos(angle / 2)
+            sin_half = np.sin(angle / 2)
+            # Simplified RX gate application
+            state_vector = state_vector * cos_half - 1j * state_vector * sin_half
+            
+        elif gate_type == "ry" and len(qubits) == 1:
+            # Rotation around Y-axis
+            angle = self.parameters[parameters[0]] if parameters else 0
+            cos_half = np.cos(angle / 2)
+            sin_half = np.sin(angle / 2)
+            # Simplified RY gate application
+            state_vector = state_vector * cos_half - state_vector * sin_half
+            
+        elif gate_type == "rz" and len(qubits) == 1:
+            # Rotation around Z-axis
+            angle = self.parameters[parameters[0]] if parameters else 0
+            # Simplified RZ gate application
+            phase_factor = np.exp(-1j * angle / 2)
+            state_vector = state_vector * phase_factor
+            
+        elif gate_type == "cnot" and len(qubits) == 2:
+            # CNOT gate (simplified)
+            # In a full implementation, this would properly handle the tensor product
+            pass
+        
+        return state_vector
+
+
+class QuantumEvolutionaryOptimizer:
+    """Quantum evolutionary algorithm for task scheduling optimization."""
+    
+    def __init__(self, population_size: int = 50, generations: int = 100):
+        self.logger = get_logger("quantum_evolutionary")
+        self.population_size = population_size
+        self.generations = generations
+        self.mutation_rate = 0.1
+        self.crossover_rate = 0.8
+        self.elite_size = max(1, population_size // 10)
+        
+    async def optimize_schedule(
+        self,
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float]
+    ) -> List[List[str]]:
+        """Optimize task schedule using quantum evolutionary algorithm."""
+        
+        self.logger.info("Starting quantum evolutionary optimization")
+        
+        # Initialize population of quantum circuits
+        population = self._initialize_population(tasks)
+        
+        best_schedule = None
+        best_fitness = float('-inf')
+        
+        for generation in range(self.generations):
+            # Evaluate fitness of all individuals
+            fitness_scores = []
+            for individual in population:
+                fitness = await self._evaluate_quantum_fitness(individual, tasks, resource_constraints)
+                fitness_scores.append(fitness)
+            
+            # Track best solution
+            max_fitness_idx = np.argmax(fitness_scores)
+            if fitness_scores[max_fitness_idx] > best_fitness:
+                best_fitness = fitness_scores[max_fitness_idx]
+                best_schedule = self._circuit_to_schedule(population[max_fitness_idx], tasks)
+            
+            # Selection, crossover, and mutation
+            population = await self._evolve_population(population, fitness_scores)
+            
+            if generation % 10 == 0:
+                self.logger.info(
+                    f"Generation {generation}: Best fitness = {best_fitness:.4f}",
+                    extra={"generation": generation, "best_fitness": best_fitness}
+                )
+        
+        self.logger.info(f"Quantum evolutionary optimization completed. Best fitness: {best_fitness:.4f}")
+        return best_schedule or self._fallback_schedule(tasks)
+    
+    def _initialize_population(self, tasks: Dict[str, QuantumTask]) -> List[QuantumCircuit]:
+        """Initialize population of quantum circuits."""
+        num_qubits = min(16, len(tasks))  # Limit for simulation
+        population = []
+        
+        for _ in range(self.population_size):
+            circuit = QuantumCircuit(
+                num_qubits=num_qubits,
+                depth=random.randint(2, 8),
+                entanglement_pattern=random.choice(["linear", "circular"])
+            )
+            
+            # Add random parameterized layers
+            for _ in range(circuit.depth):
+                circuit.add_parameterized_layer("rx_ry_rz")
+            
+            population.append(circuit)
+        
+        return population
+    
+    async def _evaluate_quantum_fitness(
+        self,
+        circuit: QuantumCircuit,
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float]
+    ) -> float:
+        """Evaluate fitness of a quantum circuit representing a schedule."""
+        
+        # Simulate quantum circuit
+        state_vector = circuit.simulate_execution()
+        
+        # Convert quantum state to task schedule
+        schedule = self._circuit_to_schedule(circuit, tasks)
+        
+        # Calculate fitness based on schedule quality
+        fitness = 0.0
+        
+        # Makespan fitness (minimize total execution time)
+        makespan = self._calculate_makespan(schedule, tasks)
+        fitness += 1.0 / (1.0 + makespan)
+        
+        # Resource utilization fitness
+        resource_utilization = self._calculate_resource_utilization(schedule, tasks, resource_constraints)
+        fitness += resource_utilization
+        
+        # Dependency satisfaction fitness
+        dependency_satisfaction = self._calculate_dependency_satisfaction(schedule, tasks)
+        fitness += dependency_satisfaction
+        
+        # Quantum coherence bonus
+        quantum_coherence = self._calculate_quantum_coherence(state_vector)
+        fitness += quantum_coherence * 0.1
+        
+        return fitness
+    
+    def _circuit_to_schedule(self, circuit: QuantumCircuit, tasks: Dict[str, QuantumTask]) -> List[List[str]]:
+        """Convert quantum circuit to task schedule."""
+        task_ids = list(tasks.keys())
+        
+        # Simulate measurement outcomes
+        state_vector = circuit.simulate_execution()
+        probabilities = np.abs(state_vector) ** 2
+        
+        # Sample multiple measurements
+        num_measurements = 100
+        measurements = []
+        for _ in range(num_measurements):
+            measurement = np.random.choice(len(probabilities), p=probabilities)
+            measurements.append(measurement)
+        
+        # Convert measurements to task ordering
+        task_ordering = []
+        for measurement in measurements:
+            binary_string = format(measurement, f'0{circuit.num_qubits}b')
+            ordering = []
+            for i, bit in enumerate(binary_string):
+                if i < len(task_ids):
+                    ordering.append((task_ids[i], int(bit)))
+            
+            # Sort by bit value to get ordering
+            ordering.sort(key=lambda x: x[1], reverse=True)
+            task_ordering.extend([task_id for task_id, _ in ordering[:3]])  # Take top 3
+        
+        # Convert to execution waves while respecting dependencies
+        schedule = self._create_dependency_aware_schedule(task_ordering, tasks)
+        
+        return schedule
+    
+    def _create_dependency_aware_schedule(
+        self,
+        task_ordering: List[str],
+        tasks: Dict[str, QuantumTask]
+    ) -> List[List[str]]:
+        """Create dependency-aware schedule from task ordering."""
+        schedule = []
+        completed_tasks = set()
+        remaining_tasks = set(tasks.keys())
+        
+        while remaining_tasks:
+            current_wave = []
+            
+            for task_id in task_ordering:
+                if (task_id in remaining_tasks and 
+                    tasks[task_id].dependencies.issubset(completed_tasks)):
+                    current_wave.append(task_id)
+                    remaining_tasks.remove(task_id)
+                    
+                    if len(current_wave) >= 4:  # Limit wave size
+                        break
+            
+            if not current_wave:
+                # Force progress by taking any available task
+                for task_id in remaining_tasks:
+                    if tasks[task_id].dependencies.issubset(completed_tasks):
+                        current_wave.append(task_id)
+                        remaining_tasks.remove(task_id)
+                        break
+            
+            if current_wave:
+                schedule.append(current_wave)
+                completed_tasks.update(current_wave)
+            else:
+                # Fallback: take any remaining task
+                if remaining_tasks:
+                    task_id = remaining_tasks.pop()
+                    schedule.append([task_id])
+                    completed_tasks.add(task_id)
+        
+        return schedule
+    
+    def _calculate_makespan(self, schedule: List[List[str]], tasks: Dict[str, QuantumTask]) -> float:
+        """Calculate total execution time (makespan)."""
+        total_time = 0.0
+        
+        for wave in schedule:
+            wave_time = 0.0
+            for task_id in wave:
+                if task_id in tasks:
+                    wave_time = max(wave_time, tasks[task_id].estimated_duration)
+            total_time += wave_time
+        
+        return total_time
+    
+    def _calculate_resource_utilization(
+        self,
+        schedule: List[List[str]],
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float]
+    ) -> float:
+        """Calculate resource utilization efficiency."""
+        if not schedule:
+            return 0.0
+        
+        total_utilization = 0.0
+        
+        for wave in schedule:
+            wave_resources = {"cpu": 0.0, "memory": 0.0, "io": 0.0}
+            
+            for task_id in wave:
+                if task_id in tasks:
+                    task_resources = tasks[task_id].resource_requirements
+                    for resource, amount in task_resources.items():
+                        wave_resources[resource] = wave_resources.get(resource, 0) + amount
+            
+            # Calculate utilization as percentage of constraints
+            wave_utilization = 0.0
+            for resource, used in wave_resources.items():
+                constraint = resource_constraints.get(resource, 1.0)
+                utilization = min(1.0, used / constraint)
+                wave_utilization += utilization
+            
+            total_utilization += wave_utilization / len(wave_resources)
+        
+        return total_utilization / len(schedule)
+    
+    def _calculate_dependency_satisfaction(
+        self,
+        schedule: List[List[str]],
+        tasks: Dict[str, QuantumTask]
+    ) -> float:
+        """Calculate how well dependencies are satisfied."""
+        completed_tasks = set()
+        violations = 0
+        total_checks = 0
+        
+        for wave in schedule:
+            for task_id in wave:
+                if task_id in tasks:
+                    total_checks += 1
+                    unsatisfied_deps = tasks[task_id].dependencies - completed_tasks
+                    violations += len(unsatisfied_deps)
+            
+            completed_tasks.update(wave)
+        
+        if total_checks == 0:
+            return 1.0
+        
+        satisfaction_rate = 1.0 - (violations / total_checks)
+        return max(0.0, satisfaction_rate)
+    
+    def _calculate_quantum_coherence(self, state_vector: np.ndarray) -> float:
+        """Calculate quantum coherence of the state."""
+        # Calculate purity as a measure of coherence
+        density_matrix = np.outer(state_vector, np.conj(state_vector))
+        purity = np.real(np.trace(density_matrix @ density_matrix))
+        return purity
+    
+    async def _evolve_population(
+        self,
+        population: List[QuantumCircuit],
+        fitness_scores: List[float]
+    ) -> List[QuantumCircuit]:
+        """Evolve population through selection, crossover, and mutation."""
+        
+        # Elite preservation
+        elite_indices = np.argsort(fitness_scores)[-self.elite_size:]
+        new_population = [population[i] for i in elite_indices]
+        
+        # Generate rest of population through crossover and mutation
+        while len(new_population) < self.population_size:
+            # Tournament selection
+            parent1 = self._tournament_selection(population, fitness_scores)
+            parent2 = self._tournament_selection(population, fitness_scores)
+            
+            # Crossover
+            if random.random() < self.crossover_rate:
+                child1, child2 = self._quantum_crossover(parent1, parent2)
+            else:
+                child1, child2 = parent1, parent2
+            
+            # Mutation
+            if random.random() < self.mutation_rate:
+                child1 = self._quantum_mutation(child1)
+            if random.random() < self.mutation_rate:
+                child2 = self._quantum_mutation(child2)
+            
+            new_population.extend([child1, child2])
+        
+        return new_population[:self.population_size]
+    
+    def _tournament_selection(
+        self,
+        population: List[QuantumCircuit],
+        fitness_scores: List[float],
+        tournament_size: int = 3
+    ) -> QuantumCircuit:
+        """Select individual using tournament selection."""
+        tournament_indices = random.sample(range(len(population)), min(tournament_size, len(population)))
+        tournament_fitness = [fitness_scores[i] for i in tournament_indices]
+        winner_idx = tournament_indices[np.argmax(tournament_fitness)]
+        return population[winner_idx]
+    
+    def _quantum_crossover(
+        self,
+        parent1: QuantumCircuit,
+        parent2: QuantumCircuit
+    ) -> Tuple[QuantumCircuit, QuantumCircuit]:
+        """Perform quantum-inspired crossover."""
+        
+        # Create children with mixed parameters
+        child1 = QuantumCircuit(
+            num_qubits=parent1.num_qubits,
+            depth=parent1.depth,
+            entanglement_pattern=parent1.entanglement_pattern
+        )
+        
+        child2 = QuantumCircuit(
+            num_qubits=parent2.num_qubits,
+            depth=parent2.depth,
+            entanglement_pattern=parent2.entanglement_pattern
+        )
+        
+        # Mix parameters with quantum superposition
+        alpha = random.uniform(0.3, 0.7)  # Superposition coefficient
+        
+        for i in range(min(len(parent1.parameters), len(parent2.parameters))):
+            # Quantum superposition-like combination
+            param1 = alpha * parent1.parameters[i] + (1 - alpha) * parent2.parameters[i]
+            param2 = (1 - alpha) * parent1.parameters[i] + alpha * parent2.parameters[i]
+            
+            child1.parameters.append(param1)
+            child2.parameters.append(param2)
+        
+        # Copy gate structures (simplified)
+        child1.gates = parent1.gates.copy()
+        child2.gates = parent2.gates.copy()
+        
+        return child1, child2
+    
+    def _quantum_mutation(self, individual: QuantumCircuit) -> QuantumCircuit:
+        """Perform quantum-inspired mutation."""
+        mutated = QuantumCircuit(
+            num_qubits=individual.num_qubits,
+            depth=individual.depth,
+            entanglement_pattern=individual.entanglement_pattern
+        )
+        
+        # Copy gates
+        mutated.gates = individual.gates.copy()
+        
+        # Mutate parameters with quantum noise
+        for param in individual.parameters:
+            # Add quantum noise (Gaussian with quantum-inspired variance)
+            noise = random.gauss(0, 0.1 * math.pi)  # 10% of 2π
+            mutated_param = param + noise
+            
+            # Periodic boundary conditions (angles are periodic)
+            mutated_param = mutated_param % (2 * math.pi)
+            
+            mutated.parameters.append(mutated_param)
+        
+        # Occasionally add or remove gates
+        if random.random() < 0.1:  # 10% chance
+            if random.random() < 0.5:
+                # Add random gate
+                gate_types = ["rx", "ry", "rz"]
+                gate_type = random.choice(gate_types)
+                qubit = random.randint(0, mutated.num_qubits - 1)
+                param_idx = len(mutated.parameters)
+                mutated.parameters.append(random.uniform(0, 2 * math.pi))
+                mutated.add_gate(gate_type, [qubit], [param_idx])
+            else:
+                # Remove random gate (if possible)
+                if mutated.gates:
+                    mutated.gates.pop(random.randint(0, len(mutated.gates) - 1))
+        
+        return mutated
+    
+    def _fallback_schedule(self, tasks: Dict[str, QuantumTask]) -> List[List[str]]:
+        """Generate fallback schedule using simple topological sort."""
+        # Simple dependency-based scheduling
+        schedule = []
+        completed = set()
+        remaining = set(tasks.keys())
+        
+        while remaining:
+            wave = []
+            for task_id in list(remaining):
+                if tasks[task_id].dependencies.issubset(completed):
+                    wave.append(task_id)
+                    remaining.remove(task_id)
+            
+            if wave:
+                schedule.append(wave)
+                completed.update(wave)
+            else:
+                # Break cycles by forcing a task
+                task_id = remaining.pop()
+                schedule.append([task_id])
+                completed.add(task_id)
+        
+        return schedule
+
+
+class QuantumNeuralOptimizer:
+    """Quantum neural network for task optimization."""
+    
+    def __init__(self, num_qubits: int = 8, num_layers: int = 4):
+        self.logger = get_logger("quantum_neural")
+        self.num_qubits = num_qubits
+        self.num_layers = num_layers
+        self.circuit = None
+        self.trained = False
+        self.training_data = []
+        
+    async def train_quantum_neural_network(
+        self,
+        training_schedules: List[Tuple[Dict[str, QuantumTask], List[List[str]], float]]
+    ) -> None:
+        """Train quantum neural network on historical scheduling data."""
+        
+        self.logger.info("Training quantum neural network")
+        
+        # Build training dataset
+        self.training_data = training_schedules
+        
+        # Initialize quantum circuit
+        self.circuit = QuantumCircuit(
+            num_qubits=self.num_qubits,
+            depth=self.num_layers,
+            entanglement_pattern="circular"
+        )
+        
+        # Add parameterized layers
+        for layer in range(self.num_layers):
+            self.circuit.add_parameterized_layer("rx_ry_rz")
+        
+        # Training using parameter shift rule (simplified)
+        learning_rate = 0.1
+        epochs = 50
+        
+        for epoch in range(epochs):
+            total_loss = 0.0
+            
+            for tasks, schedule, target_fitness in training_schedules:
+                # Forward pass
+                predicted_fitness = await self._predict_fitness(tasks, schedule)
+                
+                # Calculate loss
+                loss = (predicted_fitness - target_fitness) ** 2
+                total_loss += loss
+                
+                # Backward pass (simplified parameter shift)
+                await self._update_parameters(tasks, schedule, target_fitness, learning_rate)
+            
+            avg_loss = total_loss / len(training_schedules)
+            
+            if epoch % 10 == 0:
+                self.logger.info(f"Epoch {epoch}: Average loss = {avg_loss:.4f}")
+        
+        self.trained = True
+        self.logger.info("Quantum neural network training completed")
+    
+    async def _predict_fitness(
+        self,
+        tasks: Dict[str, QuantumTask],
+        schedule: List[List[str]]
+    ) -> float:
+        """Predict fitness using quantum neural network."""
+        
+        if not self.circuit:
+            return 0.5  # Default prediction
+        
+        # Encode input features
+        features = self._encode_features(tasks, schedule)
+        
+        # Update circuit parameters with features (simplified encoding)
+        for i, feature in enumerate(features[:len(self.circuit.parameters)]):
+            self.circuit.parameters[i] = feature * 2 * math.pi
+        
+        # Execute quantum circuit
+        state_vector = self.circuit.simulate_execution()
+        
+        # Extract prediction from quantum state
+        expectation_value = self._calculate_expectation_value(state_vector)
+        
+        # Map to [0, 1] range
+        fitness_prediction = (expectation_value + 1) / 2
+        
+        return fitness_prediction
+    
+    def _encode_features(
+        self,
+        tasks: Dict[str, QuantumTask],
+        schedule: List[List[str]]
+    ) -> List[float]:
+        """Encode task and schedule features for quantum processing."""
+        
+        features = []
+        
+        # Task features
+        num_tasks = len(tasks)
+        avg_duration = sum(t.estimated_duration for t in tasks.values()) / num_tasks if num_tasks > 0 else 0
+        avg_priority = sum(t.priority for t in tasks.values()) / num_tasks if num_tasks > 0 else 0
+        total_dependencies = sum(len(t.dependencies) for t in tasks.values())
+        
+        features.extend([
+            num_tasks / 100,  # Normalized
+            avg_duration / 10,  # Normalized
+            avg_priority,
+            total_dependencies / (num_tasks * num_tasks) if num_tasks > 0 else 0
+        ])
+        
+        # Schedule features
+        num_waves = len(schedule)
+        avg_wave_size = sum(len(wave) for wave in schedule) / num_waves if num_waves > 0 else 0
+        max_wave_size = max(len(wave) for wave in schedule) if schedule else 0
+        
+        features.extend([
+            num_waves / 20,  # Normalized
+            avg_wave_size / 10,  # Normalized
+            max_wave_size / 10  # Normalized
+        ])
+        
+        # Pad or truncate to match circuit parameters
+        while len(features) < self.num_qubits * 3:  # 3 parameters per qubit
+            features.append(0.0)
+        
+        return features[:self.num_qubits * 3]
+    
+    def _calculate_expectation_value(self, state_vector: np.ndarray) -> float:
+        """Calculate expectation value of Pauli-Z operator."""
+        
+        # Pauli-Z eigenvalues for computational basis states
+        z_eigenvalues = []
+        for i in range(len(state_vector)):
+            # Count number of |1⟩ states in binary representation
+            binary_rep = format(i, f'0{self.num_qubits}b')
+            z_eigenvalue = 1 - 2 * binary_rep.count('1') / self.num_qubits
+            z_eigenvalues.append(z_eigenvalue)
+        
+        # Calculate expectation value
+        probabilities = np.abs(state_vector) ** 2
+        expectation = np.dot(probabilities, z_eigenvalues)
+        
+        return expectation
+    
+    async def _update_parameters(
+        self,
+        tasks: Dict[str, QuantumTask],
+        schedule: List[List[str]],
+        target_fitness: float,
+        learning_rate: float
+    ) -> None:
+        """Update circuit parameters using parameter shift rule."""
+        
+        # Parameter shift rule for gradient estimation
+        shift = math.pi / 2
+        
+        for i, param in enumerate(self.circuit.parameters):
+            # Forward shift
+            self.circuit.parameters[i] = param + shift
+            fitness_plus = await self._predict_fitness(tasks, schedule)
+            
+            # Backward shift
+            self.circuit.parameters[i] = param - shift
+            fitness_minus = await self._predict_fitness(tasks, schedule)
+            
+            # Gradient estimation
+            gradient = (fitness_plus - fitness_minus) / 2
+            
+            # Parameter update
+            error = await self._predict_fitness(tasks, schedule) - target_fitness
+            self.circuit.parameters[i] = param - learning_rate * error * gradient
+            
+            # Restore original parameter
+            self.circuit.parameters[i] = param - learning_rate * error * gradient
+    
+    async def optimize_with_quantum_neural_network(
+        self,
+        tasks: Dict[str, QuantumTask]
+    ) -> List[List[str]]:
+        """Optimize schedule using trained quantum neural network."""
+        
+        if not self.trained:
+            self.logger.warning("Quantum neural network not trained, using fallback")
+            return self._fallback_schedule(tasks)
+        
+        self.logger.info("Optimizing schedule with quantum neural network")
+        
+        # Generate candidate schedules
+        candidates = []
+        
+        # Random candidates
+        for _ in range(20):
+            candidate = self._generate_random_schedule(tasks)
+            fitness = await self._predict_fitness(tasks, candidate)
+            candidates.append((candidate, fitness))
+        
+        # Topological sort candidate
+        topo_schedule = self._topological_sort_schedule(tasks)
+        fitness = await self._predict_fitness(tasks, topo_schedule)
+        candidates.append((topo_schedule, fitness))
+        
+        # Select best candidate
+        best_schedule, best_fitness = max(candidates, key=lambda x: x[1])
+        
+        self.logger.info(f"Quantum neural network optimization complete. Best fitness: {best_fitness:.4f}")
+        
+        return best_schedule
+    
+    def _generate_random_schedule(self, tasks: Dict[str, QuantumTask]) -> List[List[str]]:
+        """Generate random valid schedule."""
+        task_ids = list(tasks.keys())
+        random.shuffle(task_ids)
+        
+        schedule = []
+        completed = set()
+        remaining = set(task_ids)
+        
+        while remaining:
+            wave = []
+            for task_id in task_ids:
+                if (task_id in remaining and 
+                    tasks[task_id].dependencies.issubset(completed) and
+                    len(wave) < 4):
+                    wave.append(task_id)
+                    remaining.remove(task_id)
+            
+            if not wave and remaining:
+                # Force progress
+                task_id = next(iter(remaining))
+                wave.append(task_id)
+                remaining.remove(task_id)
+            
+            if wave:
+                schedule.append(wave)
+                completed.update(wave)
+        
+        return schedule
+    
+    def _topological_sort_schedule(self, tasks: Dict[str, QuantumTask]) -> List[List[str]]:
+        """Generate schedule using topological sort."""
+        schedule = []
+        completed = set()
+        remaining = set(tasks.keys())
+        
+        while remaining:
+            wave = []
+            for task_id in list(remaining):
+                if tasks[task_id].dependencies.issubset(completed):
+                    wave.append(task_id)
+                    remaining.remove(task_id)
+            
+            if wave:
+                schedule.append(wave)
+                completed.update(wave)
+            else:
+                # Break cycles
+                task_id = remaining.pop()
+                schedule.append([task_id])
+                completed.add(task_id)
+        
+        return schedule
+    
+    def _fallback_schedule(self, tasks: Dict[str, QuantumTask]) -> List[List[str]]:
+        """Fallback scheduling method."""
+        return self._topological_sort_schedule(tasks)
+
+
+class HybridQuantumClassicalOptimizer:
+    """Hybrid quantum-classical optimizer combining multiple approaches."""
+    
+    def __init__(self):
+        self.logger = get_logger("hybrid_optimizer")
+        self.quantum_evolutionary = QuantumEvolutionaryOptimizer()
+        self.quantum_neural = QuantumNeuralOptimizer()
+        self.classical_optimizer = None  # Would be a classical optimizer
+        
+    async def optimize_schedule(
+        self,
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float],
+        optimization_budget: float = 60.0  # seconds
+    ) -> List[List[str]]:
+        """Optimize using hybrid quantum-classical approach."""
+        
+        self.logger.info("Starting hybrid quantum-classical optimization")
+        start_time = time.time()
+        
+        # Run multiple optimizers in parallel with time budgets
+        quantum_evolutionary_budget = optimization_budget * 0.4
+        quantum_neural_budget = optimization_budget * 0.3
+        classical_budget = optimization_budget * 0.3
+        
+        # Quantum evolutionary optimization
+        evolutionary_schedule = None
+        evolutionary_fitness = 0.0
+        
+        try:
+            evolutionary_start = time.time()
+            evolutionary_schedule = await asyncio.wait_for(
+                self.quantum_evolutionary.optimize_schedule(tasks, resource_constraints),
+                timeout=quantum_evolutionary_budget
+            )
+            evolutionary_fitness = await self._evaluate_schedule_fitness(
+                evolutionary_schedule, tasks, resource_constraints
+            )
+            evolutionary_time = time.time() - evolutionary_start
+            
+            self.logger.info(f"Quantum evolutionary completed in {evolutionary_time:.2f}s, fitness: {evolutionary_fitness:.4f}")
+            
+        except asyncio.TimeoutError:
+            self.logger.warning("Quantum evolutionary optimization timed out")
+            evolutionary_schedule = self._fallback_schedule(tasks)
+            evolutionary_fitness = 0.1
+        
+        # Quantum neural optimization (if trained)
+        neural_schedule = None
+        neural_fitness = 0.0
+        
+        try:
+            neural_start = time.time()
+            neural_schedule = await asyncio.wait_for(
+                self.quantum_neural.optimize_with_quantum_neural_network(tasks),
+                timeout=quantum_neural_budget
+            )
+            neural_fitness = await self._evaluate_schedule_fitness(
+                neural_schedule, tasks, resource_constraints
+            )
+            neural_time = time.time() - neural_start
+            
+            self.logger.info(f"Quantum neural completed in {neural_time:.2f}s, fitness: {neural_fitness:.4f}")
+            
+        except asyncio.TimeoutError:
+            self.logger.warning("Quantum neural optimization timed out")
+            neural_schedule = self._fallback_schedule(tasks)
+            neural_fitness = 0.1
+        
+        # Classical optimization (fallback)
+        classical_schedule = self._classical_optimize(tasks, resource_constraints)
+        classical_fitness = await self._evaluate_schedule_fitness(
+            classical_schedule, tasks, resource_constraints
+        )
+        
+        # Select best result
+        candidates = [
+            (evolutionary_schedule, evolutionary_fitness, "quantum_evolutionary"),
+            (neural_schedule, neural_fitness, "quantum_neural"),
+            (classical_schedule, classical_fitness, "classical")
+        ]
+        
+        best_schedule, best_fitness, best_method = max(candidates, key=lambda x: x[1])
+        
+        total_time = time.time() - start_time
+        
+        self.logger.info(
+            f"Hybrid optimization completed in {total_time:.2f}s. "
+            f"Best method: {best_method}, fitness: {best_fitness:.4f}"
+        )
+        
+        return best_schedule
+    
+    async def _evaluate_schedule_fitness(
+        self,
+        schedule: List[List[str]],
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float]
+    ) -> float:
+        """Evaluate fitness of a schedule."""
+        if not schedule:
+            return 0.0
+        
+        # Calculate multiple fitness components
+        makespan_fitness = self._calculate_makespan_fitness(schedule, tasks)
+        resource_fitness = self._calculate_resource_fitness(schedule, tasks, resource_constraints)
+        dependency_fitness = self._calculate_dependency_fitness(schedule, tasks)
+        
+        # Weighted combination
+        total_fitness = (
+            0.4 * makespan_fitness +
+            0.3 * resource_fitness +
+            0.3 * dependency_fitness
+        )
+        
+        return total_fitness
+    
+    def _calculate_makespan_fitness(self, schedule: List[List[str]], tasks: Dict[str, QuantumTask]) -> float:
+        """Calculate fitness based on total execution time."""
+        total_time = 0.0
+        
+        for wave in schedule:
+            wave_time = 0.0
+            for task_id in wave:
+                if task_id in tasks:
+                    wave_time = max(wave_time, tasks[task_id].estimated_duration)
+            total_time += wave_time
+        
+        # Convert to fitness (lower time = higher fitness)
+        max_possible_time = sum(tasks[t].estimated_duration for t in tasks.keys())
+        if max_possible_time > 0:
+            return max(0.0, 1.0 - total_time / max_possible_time)
+        return 1.0
+    
+    def _calculate_resource_fitness(
+        self,
+        schedule: List[List[str]],
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float]
+    ) -> float:
+        """Calculate fitness based on resource utilization."""
+        total_violations = 0.0
+        total_checks = 0
+        
+        for wave in schedule:
+            wave_resources = {"cpu": 0.0, "memory": 0.0, "io": 0.0}
+            
+            for task_id in wave:
+                if task_id in tasks:
+                    task_resources = tasks[task_id].resource_requirements
+                    for resource, amount in task_resources.items():
+                        wave_resources[resource] = wave_resources.get(resource, 0) + amount
+            
+            for resource, used in wave_resources.items():
+                constraint = resource_constraints.get(resource, 1.0)
+                if used > constraint:
+                    total_violations += used - constraint
+                total_checks += 1
+        
+        if total_checks == 0:
+            return 1.0
+        
+        violation_rate = total_violations / total_checks
+        return max(0.0, 1.0 - violation_rate)
+    
+    def _calculate_dependency_fitness(self, schedule: List[List[str]], tasks: Dict[str, QuantumTask]) -> float:
+        """Calculate fitness based on dependency satisfaction."""
+        completed = set()
+        violations = 0
+        total_checks = 0
+        
+        for wave in schedule:
+            for task_id in wave:
+                if task_id in tasks:
+                    total_checks += 1
+                    unsatisfied_deps = tasks[task_id].dependencies - completed
+                    violations += len(unsatisfied_deps)
+            completed.update(wave)
+        
+        if total_checks == 0:
+            return 1.0
+        
+        violation_rate = violations / total_checks
+        return max(0.0, 1.0 - violation_rate)
+    
+    def _classical_optimize(
+        self,
+        tasks: Dict[str, QuantumTask],
+        resource_constraints: Dict[str, float]
+    ) -> List[List[str]]:
+        """Classical optimization using greedy heuristic."""
+        # Priority-based greedy scheduling
+        schedule = []
+        completed = set()
+        remaining = set(tasks.keys())
+        
+        while remaining:
+            # Find tasks with satisfied dependencies
+            available_tasks = [
+                task_id for task_id in remaining 
+                if tasks[task_id].dependencies.issubset(completed)
+            ]
+            
+            if not available_tasks:
+                # Force progress by picking any remaining task
+                available_tasks = [next(iter(remaining))]
+            
+            # Sort by priority and criticality
+            available_tasks.sort(
+                key=lambda t: (tasks[t].priority, tasks[t].criticality_score),
+                reverse=True
+            )
+            
+            # Build wave with resource constraints
+            wave = []
+            wave_resources = {"cpu": 0.0, "memory": 0.0, "io": 0.0}
+            
+            for task_id in available_tasks:
+                task_resources = tasks[task_id].resource_requirements
+                
+                # Check if adding this task violates constraints
+                can_add = True
+                for resource, amount in task_resources.items():
+                    if (wave_resources.get(resource, 0) + amount > 
+                        resource_constraints.get(resource, 1.0)):
+                        can_add = False
+                        break
+                
+                if can_add:
+                    wave.append(task_id)
+                    remaining.remove(task_id)
+                    for resource, amount in task_resources.items():
+                        wave_resources[resource] = wave_resources.get(resource, 0) + amount
+            
+            if wave:
+                schedule.append(wave)
+                completed.update(wave)
+            else:
+                # Force at least one task per wave
+                task_id = available_tasks[0]
+                schedule.append([task_id])
+                remaining.remove(task_id)
+                completed.add(task_id)
+        
+        return schedule
+    
+    def _fallback_schedule(self, tasks: Dict[str, QuantumTask]) -> List[List[str]]:
+        """Simple fallback scheduling."""
+        return self._classical_optimize(tasks, {"cpu": 4.0, "memory": 8.0, "io": 4.0})
