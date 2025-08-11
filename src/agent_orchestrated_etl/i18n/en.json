@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "Autonomous SDLC",
+    "description": "AI-Powered Software Development Life Cycle"
+  },
+  "errors": {
+    "validation_failed": "Validation failed",
+    "authentication_required": "Authentication required",
+    "access_denied": "Access denied",
+    "resource_not_found": "Resource not found",
+    "server_error": "Internal server error"
+  },
+  "status": {
+    "success": "Success",
+    "pending": "Pending",
+    "failed": "Failed",
+    "in_progress": "In Progress"
+  }
+}

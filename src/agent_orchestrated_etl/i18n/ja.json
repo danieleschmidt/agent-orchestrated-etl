@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "自律SDLC",
+    "description": "AI駆動ソフトウェア開発ライフサイクル"
+  },
+  "errors": {
+    "validation_failed": "検証失敗",
+    "authentication_required": "認証が必要です",
+    "access_denied": "アクセス拒否",
+    "resource_not_found": "リソースが見つかりません",
+    "server_error": "内部サーバーエラー"
+  },
+  "status": {
+    "success": "成功",
+    "pending": "保留中",
+    "failed": "失敗",
+    "in_progress": "進行中"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "Autonomer SDLC",
+    "description": "KI-gesteuerter Software-Entwicklungslebenszyklus"
+  },
+  "errors": {
+    "validation_failed": "Validierung fehlgeschlagen",
+    "authentication_required": "Authentifizierung erforderlich",
+    "access_denied": "Zugriff verweigert",
+    "resource_not_found": "Ressource nicht gefunden",
+    "server_error": "Interner Serverfehler"
+  },
+  "status": {
+    "success": "Erfolg",
+    "pending": "Ausstehend",
+    "failed": "Fehlgeschlagen",
+    "in_progress": "In Bearbeitung"
+  }
+}

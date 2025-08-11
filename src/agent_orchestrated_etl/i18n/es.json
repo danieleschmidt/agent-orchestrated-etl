@@ -1,0 +1,19 @@
+{
+  "app": {
+    "name": "SDLC Autónomo",
+    "description": "Ciclo de Vida de Desarrollo de Software Impulsado por IA"
+  },
+  "errors": {
+    "validation_failed": "Validación fallida",
+    "authentication_required": "Autenticación requerida",
+    "access_denied": "Acceso denegado",
+    "resource_not_found": "Recurso no encontrado",
+    "server_error": "Error interno del servidor"
+  },
+  "status": {
+    "success": "Éxito",
+    "pending": "Pendiente",
+    "failed": "Fallido",
+    "in_progress": "En Progreso"
+  }
+}
