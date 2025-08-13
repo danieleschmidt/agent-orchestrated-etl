@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Set
 
-from .validation import validate_dag_id, validate_task_name, ValidationError
+from .validation import ValidationError, validate_dag_id, validate_task_name
 
 
 @dataclass
@@ -28,7 +28,7 @@ class SimpleDAG:
             validated_task_id = validate_task_name(task_id)
         except ValidationError as e:
             raise ValueError(f"Invalid task ID '{task_id}': {e}")
-        
+
         if validated_task_id in self.tasks:
             return self.tasks[validated_task_id]
 
@@ -98,7 +98,7 @@ def generate_dag(metadata: Dict) -> SimpleDAG:
             validated_table = validate_task_name(str(table))
         except ValidationError as e:
             raise ValueError(f"Invalid table name '{table}': {e}")
-        
+
         extract_id = f"extract_{validated_table}"
         transform_id = f"transform_{validated_table}"
         load_id = f"load_{validated_table}"

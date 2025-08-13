@@ -1,9 +1,15 @@
 """Test workflow routing functionality in orchestrator agent."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from src.agent_orchestrated_etl.agents.base_agent import (
+    AgentConfig,
+    AgentRole,
+    AgentTask,
+)
 from src.agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
-from src.agent_orchestrated_etl.agents.base_agent import AgentConfig, AgentRole, AgentTask
 
 
 class TestWorkflowRouting:
@@ -17,14 +23,14 @@ class TestWorkflowRouting:
             role=AgentRole.ORCHESTRATOR,
             max_concurrent_tasks=5,
         )
-        
+
         agent = OrchestratorAgent(config=config)
-        
+
         # Mock the tool registry and memory
         agent.tool_registry = MagicMock()
         agent.memory = MagicMock()
         agent.memory.store_entry = AsyncMock()
-        
+
         return agent
 
     @pytest.mark.asyncio
@@ -43,16 +49,16 @@ class TestWorkflowRouting:
                 "workflow_id": "batch_workflow_001"
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "batch_schema", "tables": ["events"], "volume": "large"},  # analyze_data_source
             {"steps": [{"type": "extract"}, {"type": "transform"}, {"type": "load"}], "optimized_for": "batch"},  # generate_execution_plan
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify batch processing routing was applied
         assert result["workflow_type"] == "batch_processing"
         assert result["optimization_strategy"] == "throughput_optimized"
@@ -74,16 +80,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "event_schema", "tables": ["stream"], "volume": "continuous"},
             {"steps": [{"type": "stream_extract"}, {"type": "transform"}, {"type": "stream_load"}], "optimized_for": "latency"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify streaming routing was applied
         assert result["workflow_type"] == "streaming"
         assert result["optimization_strategy"] == "latency_optimized"
@@ -105,16 +111,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "relational_schema", "tables": ["orders", "customers"], "volume": "medium"},
             {"steps": [{"type": "extract"}, {"type": "transform"}, {"type": "warehouse_load"}], "optimized_for": "analytics"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify data warehouse routing was applied
         assert result["workflow_type"] == "data_warehouse"
         assert result["optimization_strategy"] == "analytics_optimized"
@@ -136,16 +142,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "feature_schema", "tables": ["features"], "volume": "large"},
             {"steps": [{"type": "extract"}, {"type": "feature_engineering"}, {"type": "model_training"}], "optimized_for": "ml"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify ML routing was applied
         assert result["workflow_type"] == "machine_learning"
         assert result["optimization_strategy"] == "ml_optimized"
@@ -167,16 +173,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "mixed_schema", "tables": ["raw"], "volume": "very_large"},
             {"steps": [{"type": "extract"}, {"type": "partition"}, {"type": "lake_store"}], "optimized_for": "storage"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify data lake routing was applied
         assert result["workflow_type"] == "data_lake"
         assert result["optimization_strategy"] == "storage_optimized"
@@ -196,16 +202,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "csv_schema", "tables": ["data"], "volume": "small"},
             {"steps": [{"type": "extract"}, {"type": "transform"}, {"type": "load"}], "optimized_for": "general"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify default routing was applied
         assert result["workflow_type"] == "general_purpose"
         assert result["optimization_strategy"] == "balanced"
@@ -225,16 +231,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses - simulate large volume dataset
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "large_schema", "tables": ["events"], "volume": "very_large", "estimated_size": "10TB"},
             {"steps": [{"type": "extract"}, {"type": "transform"}, {"type": "load"}], "optimized_for": "batch"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify auto-routing selected batch processing for large volume
         assert result["workflow_type"] == "batch_processing"
         assert result["routing_decision"]["reason"] == "large_data_volume"
@@ -263,16 +269,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "api_schema", "tables": ["api_data"], "volume": "medium"},
             {"steps": [{"type": "extract"}, {"type": "transform"}, {"type": "load"}], "optimized_for": "batch"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify custom parameters were applied
         assert result["resource_allocation"]["max_parallel_tasks"] == 5
         assert result["execution_configuration"]["timeout_minutes"] == 30
@@ -293,16 +299,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "stream_schema", "tables": ["events"], "volume": "continuous"},
             {"steps": [{"type": "stream_extract"}, {"type": "transform"}, {"type": "stream_load"}], "optimized_for": "latency"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify audit trail is present
         assert "routing_decision" in result
         routing_decision = result["routing_decision"]
@@ -310,7 +316,7 @@ class TestWorkflowRouting:
         assert routing_decision["routing_strategy"] == "target_based"
         assert routing_decision["timestamp"] > 0
         assert "decision_factors" in routing_decision
-        
+
         # Verify memory storage was called for audit trail
         orchestrator_agent.memory.store_entry.assert_called()
 
@@ -328,16 +334,16 @@ class TestWorkflowRouting:
                 }
             }
         )
-        
+
         # Mock tool responses
         orchestrator_agent._use_tool = AsyncMock()
         orchestrator_agent._use_tool.side_effect = [
             {"schema": "text_schema", "tables": ["text"], "volume": "small"},
             {"steps": [{"type": "extract"}, {"type": "transform"}, {"type": "load"}], "optimized_for": "general"},
         ]
-        
+
         result = await orchestrator_agent._create_workflow(task)
-        
+
         # Verify fallback to default routing
         assert result["workflow_type"] == "general_purpose"
         assert result["routing_decision"]["fallback_reason"] == "invalid_target_specified"

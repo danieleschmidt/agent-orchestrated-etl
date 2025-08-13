@@ -1,9 +1,9 @@
 """Sample data fixtures for testing."""
 
-from typing import Dict, List, Any
 import json
 import tempfile
 from pathlib import Path
+from typing import Any, Dict, List
 
 
 class SampleDataFixtures:
@@ -135,15 +135,15 @@ class SampleDataFixtures:
         """Create a temporary CSV file with sample data."""
         if content is None:
             content = cls.simple_csv_data()
-        
+
         temp_file = tempfile.NamedTemporaryFile(
-            mode='w', 
-            suffix='.csv', 
+            mode='w',
+            suffix='.csv',
             delete=False
         )
         temp_file.write(content)
         temp_file.close()
-        
+
         return Path(temp_file.name)
 
     @classmethod
@@ -151,15 +151,15 @@ class SampleDataFixtures:
         """Create a temporary JSON file with sample data."""
         if data is None:
             data = cls.json_data()
-        
+
         temp_file = tempfile.NamedTemporaryFile(
-            mode='w', 
-            suffix='.json', 
+            mode='w',
+            suffix='.json',
             delete=False
         )
         json.dump(data, temp_file, indent=2)
         temp_file.close()
-        
+
         return Path(temp_file.name)
 
     @staticmethod

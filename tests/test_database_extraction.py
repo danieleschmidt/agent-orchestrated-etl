@@ -1,11 +1,12 @@
 """Tests for database extraction functionality."""
-import pytest
+import os
 import sqlite3
 import tempfile
-import os
 
-from agent_orchestrated_etl.agents.etl_agent import ETLAgent
+import pytest
+
 from agent_orchestrated_etl.agents.base_agent import AgentConfig
+from agent_orchestrated_etl.agents.etl_agent import ETLAgent
 
 
 class TestDatabaseExtraction:
@@ -22,7 +23,7 @@ class TestDatabaseExtraction:
         """Create a temporary SQLite database for testing."""
         db_fd, db_path = tempfile.mkstemp(suffix='.db')
         os.close(db_fd)
-        
+
         # Create test data
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -40,7 +41,7 @@ class TestDatabaseExtraction:
         )
         conn.commit()
         conn.close()
-        
+
         yield db_path
         os.unlink(db_path)
 
@@ -52,16 +53,16 @@ class TestDatabaseExtraction:
             'query': 'SELECT * FROM test_table',
             'database_type': 'sqlite'
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         # Should return actual data, not placeholder
         assert result['extraction_method'] == 'database'
         assert result['status'] == 'completed'
         assert 'data' in result
         assert len(result['data']) == 3
         assert result['record_count'] == 3
-        
+
         # Verify data structure
         first_row = result['data'][0]
         assert 'id' in first_row
@@ -77,9 +78,9 @@ class TestDatabaseExtraction:
             'parameters': {'min_id': 1},
             'database_type': 'sqlite'
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         assert result['status'] == 'completed'
         assert len(result['data']) == 2  # Only id 2 and 3
         assert result['record_count'] == 2
@@ -93,9 +94,9 @@ class TestDatabaseExtraction:
             'batch_size': 2,
             'database_type': 'sqlite'
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         assert result['status'] == 'completed'
         assert result['record_count'] == 3
         assert 'batch_info' in result
@@ -109,31 +110,31 @@ class TestDatabaseExtraction:
             'query': 'SELECT * FROM test_table',
             'database_type': 'postgresql'
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         assert result['status'] == 'error'
         assert 'error_message' in result
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_extract_from_database_sql_injection_prevention(self, etl_agent, sqlite_db):
         """Test SQL injection prevention with parameterized queries."""
         # This should be safe because we use parameterized queries
         malicious_input = "'; DROP TABLE test_table; --"
-        
+
         source_config = {
             'connection_string': f'sqlite:///{sqlite_db}',
             'query': 'SELECT * FROM test_table WHERE name = :name',
             'parameters': {'name': malicious_input},
             'database_type': 'sqlite'
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         # Should execute safely without dropping table
         assert result['status'] == 'completed'
         assert result['record_count'] == 0  # No matching records
-        
+
         # Verify table still exists by running another query
         verify_config = {
             'connection_string': f'sqlite:///{sqlite_db}',
@@ -153,9 +154,9 @@ class TestDatabaseExtraction:
             'timeout': 0.001,  # Very short timeout
             'database_type': 'sqlite'
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         # Should handle timeout gracefully
         assert result['status'] in ['completed', 'timeout', 'error']
         if result['status'] == 'timeout':
@@ -169,10 +170,10 @@ class TestDatabaseExtraction:
             'query': 'SELECT version()',
             'database_type': 'postgresql'
         }
-        
+
         # Should fail gracefully when PostgreSQL is not available
         result = await etl_agent._extract_from_database(source_config)
-        
+
         assert result['status'] == 'error'
         assert 'error_message' in result
 
@@ -184,10 +185,10 @@ class TestDatabaseExtraction:
             'query': 'SELECT version()',
             'database_type': 'mysql'
         }
-        
+
         # Should fail gracefully when MySQL is not available
         result = await etl_agent._extract_from_database(source_config)
-        
+
         assert result['status'] == 'error'
         assert 'error_message' in result
 
@@ -201,9 +202,9 @@ class TestDatabaseExtraction:
             'pool_size': 5,
             'max_overflow': 10
         }
-        
+
         result = await etl_agent._extract_from_database(source_config)
-        
+
         assert result['status'] == 'completed'
         assert 'connection_info' in result
         assert 'pool_configured' in result['connection_info']

@@ -1,9 +1,9 @@
 """Unit tests for IntelligenceService."""
 
-import pytest
 from datetime import datetime, timedelta
-from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
+
+import pytest
 
 from src.agent_orchestrated_etl.services.intelligence_service import IntelligenceService
 
@@ -30,19 +30,19 @@ class TestIntelligenceService:
             "performance": "medium",
             "compliance": ["GDPR", "SOX"]
         }
-        
+
         result = await self.intelligence_service.analyze_pipeline_requirements(
             source_config, business_requirements
         )
-        
+
         assert "recommended_transformations" in result
         assert "estimated_complexity" in result
         assert "resource_requirements" in result
         assert "compliance_recommendations" in result
-        
+
         # Should recommend data validation for high quality requirement
         assert any("validation" in t.lower() for t in result["recommended_transformations"])
-        
+
         # Should include GDPR compliance recommendations
         assert any("gdpr" in r.lower() for r in result["compliance_recommendations"])
 
@@ -59,15 +59,15 @@ class TestIntelligenceService:
             "performance": "high",
             "scalability": "required"
         }
-        
+
         result = await self.intelligence_service.analyze_pipeline_requirements(
             source_config, business_requirements
         )
-        
+
         assert result["estimated_complexity"] == "high"
         assert "parallel_processing" in result["recommended_optimizations"]
         assert "batch_processing" in result["recommended_optimizations"]
-        
+
         # Should recommend high resource allocation
         memory_req = result["resource_requirements"]["memory_gb"]
         assert memory_req >= 8  # At least 8GB for large datasets
@@ -96,15 +96,15 @@ class TestIntelligenceService:
                 "timestamp": datetime.now() - timedelta(days=2)
             }
         ]
-        
+
         result = await self.intelligence_service.optimize_execution_strategy(
             pipeline_id, current_metrics, historical_data
         )
-        
+
         assert "optimization_recommendations" in result
         assert "predicted_improvements" in result
         assert "confidence_score" in result
-        
+
         # Should recommend increasing parallelism due to low CPU utilization
         recommendations = result["optimization_recommendations"]
         assert any("parallel" in r.lower() or "cpu" in r.lower() for r in recommendations)
@@ -121,13 +121,13 @@ class TestIntelligenceService:
             "oom_errors": 2
         }
         historical_data = []
-        
+
         result = await self.intelligence_service.optimize_execution_strategy(
             pipeline_id, current_metrics, historical_data
         )
-        
+
         recommendations = result["optimization_recommendations"]
-        
+
         # Should recommend memory optimization strategies
         assert any("memory" in r.lower() or "batch" in r.lower() for r in recommendations)
         assert any("streaming" in r.lower() or "chunk" in r.lower() for r in recommendations)
@@ -148,7 +148,7 @@ class TestIntelligenceService:
             "resources": {"memory_gb": 8, "cpu_cores": 4},
             "timeout_minutes": 60
         }
-        
+
         # Mock historical performance data
         self.mock_db_manager.execute_query.return_value = [
             {
@@ -157,11 +157,11 @@ class TestIntelligenceService:
                 "avg_memory_usage": 4.2
             }
         ]
-        
+
         result = await self.intelligence_service.predict_pipeline_behavior(
             pipeline_config, execution_context
         )
-        
+
         assert result["predicted_success_probability"] > 0.8
         assert result["estimated_execution_time_minutes"] > 0
         assert result["estimated_resource_usage"]["memory_gb"] > 0
@@ -184,7 +184,7 @@ class TestIntelligenceService:
             "resources": {"memory_gb": 2, "cpu_cores": 1},
             "timeout_minutes": 30
         }
-        
+
         # Mock historical data showing poor performance
         self.mock_db_manager.execute_query.return_value = [
             {
@@ -193,11 +193,11 @@ class TestIntelligenceService:
                 "avg_memory_usage": 6.8
             }
         ]
-        
+
         result = await self.intelligence_service.predict_pipeline_behavior(
             pipeline_config, execution_context
         )
-        
+
         assert result["predicted_success_probability"] < 0.7
         assert len(result["risk_factors"]) > 0
         assert "insufficient_resources" in str(result["risk_factors"]).lower()
@@ -218,12 +218,12 @@ class TestIntelligenceService:
                 {"type": "validation", "duration_minutes": 3}
             ]
         }
-        
+
         await self.intelligence_service.learn_from_execution(execution_data)
-        
+
         # Should have stored learning data in database
         self.mock_db_manager.execute_query.assert_called()
-        
+
         # Verify the learning data was processed correctly
         call_args = self.mock_db_manager.execute_query.call_args
         assert "INSERT" in call_args[0][0] or "UPDATE" in call_args[0][0]
@@ -241,9 +241,9 @@ class TestIntelligenceService:
             "error_message": "Java heap space",
             "failure_stage": "transformation"
         }
-        
+
         await self.intelligence_service.learn_from_execution(execution_data)
-        
+
         # Should have recorded failure patterns
         self.mock_db_manager.execute_query.assert_called()
 
@@ -261,19 +261,19 @@ class TestIntelligenceService:
             "null_tolerance": 5.0,
             "duplicate_tolerance": 2.0
         }
-        
+
         result = await self.intelligence_service._recommend_transformations(
             data_profile, business_rules
         )
-        
+
         transformations = result["transformations"]
-        
+
         # Should recommend null handling
         assert any("null" in t["type"].lower() for t in transformations)
-        
+
         # Should recommend duplicate removal
         assert any("duplicate" in t["type"].lower() for t in transformations)
-        
+
         # Should recommend outlier detection
         assert any("outlier" in t["type"].lower() for t in transformations)
 
@@ -287,9 +287,9 @@ class TestIntelligenceService:
             ],
             "destination": {"type": "database"}
         }
-        
+
         complexity = await self.intelligence_service._estimate_complexity(pipeline_config)
-        
+
         assert complexity == "low"
 
     @pytest.mark.asyncio
@@ -304,9 +304,9 @@ class TestIntelligenceService:
             ],
             "destination": {"type": "multiple_targets"}
         }
-        
+
         complexity = await self.intelligence_service._estimate_complexity(pipeline_config)
-        
+
         assert complexity in ["high", "very_high"]
 
     @pytest.mark.asyncio
@@ -318,11 +318,11 @@ class TestIntelligenceService:
             {"type": "aggregation", "memory_multiplier": 1.5},
             {"type": "join", "memory_multiplier": 2.0}
         ]
-        
+
         result = await self.intelligence_service._calculate_resource_requirements(
             data_size_gb, complexity_score, transformations
         )
-        
+
         assert result["memory_gb"] >= data_size_gb  # At least as much as data size
         assert result["cpu_cores"] >= 1
         assert result["storage_gb"] >= data_size_gb
@@ -337,7 +337,7 @@ class TestIntelligenceService:
             "transformation_types": ["cleaning", "validation"],
             "destination_type": "file"
         }
-        
+
         # Mock similar pipelines from database
         self.mock_db_manager.execute_query.return_value = [
             {
@@ -347,15 +347,15 @@ class TestIntelligenceService:
                 "similarity_score": 0.85
             },
             {
-                "pipeline_id": "similar-002", 
+                "pipeline_id": "similar-002",
                 "avg_execution_time": 22.0,
                 "success_rate": 0.88,
                 "similarity_score": 0.78
             }
         ]
-        
+
         result = await self.intelligence_service._get_similar_pipelines(pipeline_config)
-        
+
         assert len(result) == 2
         assert result[0]["similarity_score"] > result[1]["similarity_score"]
         assert all("pipeline_id" in p for p in result)
@@ -364,7 +364,7 @@ class TestIntelligenceService:
     async def test_analyze_historical_patterns(self):
         """Test historical pattern analysis."""
         pipeline_id = "pattern-pipeline-001"
-        
+
         # Mock historical execution data
         historical_data = [
             {"execution_time": 25, "success": True, "memory_usage": 4.0, "timestamp": "2023-01-01"},
@@ -372,11 +372,11 @@ class TestIntelligenceService:
             {"execution_time": 45, "success": False, "memory_usage": 7.8, "timestamp": "2023-01-03"},
             {"execution_time": 24, "success": True, "memory_usage": 3.9, "timestamp": "2023-01-04"}
         ]
-        
+
         result = await self.intelligence_service._analyze_historical_patterns(
             pipeline_id, historical_data
         )
-        
+
         assert "success_rate" in result
         assert "avg_execution_time" in result
         assert "performance_trend" in result
@@ -393,13 +393,13 @@ class TestIntelligenceService:
         }
         pipeline2 = {
             "source_type": "database",
-            "data_size_category": "large", 
+            "data_size_category": "large",
             "transformation_count": 3,
             "complexity": "high"
         }
-        
+
         score = self.intelligence_service._calculate_similarity_score(pipeline1, pipeline2)
-        
+
         assert 0.0 <= score <= 1.0
         assert score > 0.5  # Should be somewhat similar due to matching source_type and transformation_count
 
@@ -408,14 +408,14 @@ class TestIntelligenceService:
         """Test error handling during pipeline analysis."""
         source_config = {"type": "invalid_source"}
         business_requirements = {}
-        
+
         # Mock database error
         self.mock_db_manager.execute_query.side_effect = Exception("Database connection failed")
-        
+
         result = await self.intelligence_service.analyze_pipeline_requirements(
             source_config, business_requirements
         )
-        
+
         # Should gracefully handle errors and return basic recommendations
         assert "recommended_transformations" in result
         assert "estimated_complexity" in result

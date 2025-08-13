@@ -1,21 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
-import json
-
-from .data_source_analysis import analyze_source, SUPPORTED_SOURCES
-from . import data_source_analysis
-from .dag_generator import generate_dag, dag_to_airflow_code
-from . import orchestrator
+from . import data_source_analysis, orchestrator
+from .dag_generator import dag_to_airflow_code, generate_dag
+from .data_source_analysis import SUPPORTED_SOURCES, analyze_source
 from .validation import (
-    safe_path_type,
+    ValidationError,
     safe_dag_id_type,
+    safe_path_type,
     safe_source_type,
     sanitize_json_output,
-    ValidationError
 )
 
 

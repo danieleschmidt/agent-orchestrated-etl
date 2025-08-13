@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-
 def generate_config_template(
     format_type: str = "yaml",
     include_comments: bool = True,
@@ -39,9 +38,9 @@ def _generate_yaml_template(
     environment: str,
 ) -> str:
     """Generate YAML configuration template."""
-    
+
     template_lines = []
-    
+
     if include_comments:
         template_lines.extend([
             "# Agent-Orchestrated ETL Configuration",
@@ -50,25 +49,25 @@ def _generate_yaml_template(
             "# Environment variables will override these settings.",
             "",
         ])
-    
+
     # Core settings
     if include_comments:
         template_lines.extend([
             "# Core application settings",
         ])
-    
+
     template_lines.extend([
         f"environment: {environment}",
         f"debug: {'true' if environment == 'development' else 'false'}",
         "",
     ])
-    
+
     # Security settings
     if include_comments:
         template_lines.extend([
             "# Security configuration",
         ])
-    
+
     template_lines.extend([
         "security:",
         "  secret_provider: env  # Options: env, aws_secrets, vault",
@@ -80,7 +79,7 @@ def _generate_yaml_template(
         "  max_dag_generation_per_minute: 120",
         "",
     ])
-    
+
     # Database settings
     if include_comments:
         template_lines.extend([
@@ -88,14 +87,14 @@ def _generate_yaml_template(
             "# Use environment variables for sensitive values:",
             "# AGENT_ETL_DB_HOST, AGENT_ETL_DB_USER, AGENT_ETL_DB_PASSWORD",
         ])
-    
+
     if include_examples:
         host_example = "localhost" if environment == "development" else "prod-db.example.com"
         db_example = "agent_etl_dev" if environment == "development" else "agent_etl_prod"
     else:
         host_example = "null"
         db_example = "null"
-    
+
     template_lines.extend([
         "database:",
         f"  host: {host_example}  # Override with AGENT_ETL_DB_HOST",
@@ -107,7 +106,7 @@ def _generate_yaml_template(
         "  connection_timeout: 30",
         "",
     ])
-    
+
     # S3 settings
     if include_comments:
         template_lines.extend([
@@ -115,7 +114,7 @@ def _generate_yaml_template(
             "# Use environment variables for credentials:",
             "# AGENT_ETL_S3_ACCESS_KEY_ID, AGENT_ETL_S3_SECRET_ACCESS_KEY",
         ])
-    
+
     template_lines.extend([
         "s3:",
         "  region: us-east-1",
@@ -126,18 +125,18 @@ def _generate_yaml_template(
         "  use_ssl: true",
         "",
     ])
-    
+
     # API settings
     if include_comments:
         template_lines.extend([
             "# External API configuration",
         ])
-    
+
     if include_examples:
         api_url = "https://api.example.com" if environment == "production" else "https://api-dev.example.com"
     else:
         api_url = "null"
-    
+
     template_lines.extend([
         "api:",
         f"  base_url: {api_url}",
@@ -147,17 +146,17 @@ def _generate_yaml_template(
         "  user_agent: agent-orchestrated-etl/1.0",
         "",
     ])
-    
+
     # Logging settings
     if include_comments:
         template_lines.extend([
             "# Logging configuration",
         ])
-    
+
     log_level = "INFO" if environment == "production" else "DEBUG"
     log_output = "file" if environment == "production" else "console"
     log_file = "/var/log/agent-etl/app.log" if environment == "production" else "null"
-    
+
     template_lines.extend([
         "logging:",
         f"  level: {log_level}  # DEBUG, INFO, WARNING, ERROR, CRITICAL",
@@ -168,13 +167,13 @@ def _generate_yaml_template(
         "  backup_count: 5",
         "",
     ])
-    
+
     # Paths
     if include_comments:
         template_lines.extend([
             "# Directory paths",
         ])
-    
+
     if environment == "production":
         temp_dir = "/tmp/agent_etl"
         data_dir = "/opt/agent_etl/data"
@@ -183,20 +182,20 @@ def _generate_yaml_template(
         temp_dir = "./tmp"
         data_dir = "./data"
         output_dir = "./output"
-    
+
     template_lines.extend([
         "paths:",
         f"  temp_dir: {temp_dir}",
         f"  data_dir: {data_dir}",
         f"  output_dir: {output_dir}",
     ])
-    
+
     return "\n".join(template_lines)
 
 
 def _generate_json_template(include_examples: bool, environment: str) -> str:
     """Generate JSON configuration template."""
-    
+
     # Create template structure
     template = {
         "environment": environment,
@@ -243,7 +242,7 @@ def _generate_json_template(include_examples: bool, environment: str) -> str:
             "backup_count": 5,
         },
     }
-    
+
     return json.dumps(template, indent=2, ensure_ascii=False)
 
 
@@ -255,7 +254,7 @@ def generate_environment_configs() -> Dict[str, str]:
     """
     environments = ["development", "staging", "production"]
     configs = {}
-    
+
     for env in environments:
         configs[env] = generate_config_template(
             format_type="yaml",
@@ -263,7 +262,7 @@ def generate_environment_configs() -> Dict[str, str]:
             include_examples=True,
             environment=env,
         )
-    
+
     return configs
 
 
@@ -287,10 +286,10 @@ def save_config_template(
     """
     if output_path.exists() and not overwrite:
         raise FileExistsError(f"File already exists: {output_path}")
-    
+
     # Ensure parent directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Generate template
     template_content = generate_config_template(
         format_type=format_type,
@@ -298,7 +297,7 @@ def save_config_template(
         include_examples=True,
         environment=environment,
     )
-    
+
     # Write to file
     output_path.write_text(template_content, encoding="utf-8")
 
@@ -312,7 +311,7 @@ def generate_docker_compose_template(environment: str = "development") -> str:
     Returns:
         Docker Compose YAML content
     """
-    
+
     template_lines = [
         "# Docker Compose configuration for Agent-Orchestrated ETL",
         f"# Environment: {environment}",
@@ -359,7 +358,7 @@ def generate_docker_compose_template(environment: str = "development") -> str:
         "volumes:",
         "  postgres_data:",
     ]
-    
+
     if environment == "production":
         # Add production-specific configurations
         template_lines.extend([
@@ -369,7 +368,7 @@ def generate_docker_compose_template(environment: str = "development") -> str:
             "  # - Configure proper secrets management",
             "  # - Set up monitoring and logging",
         ])
-    
+
     return "\n".join(template_lines)
 
 
@@ -382,7 +381,7 @@ def generate_env_template(environment: str = "development") -> str:
     Returns:
         Environment variables file content
     """
-    
+
     template_lines = [
         "# Environment variables for Agent-Orchestrated ETL",
         f"# Environment: {environment}",
@@ -427,7 +426,7 @@ def generate_env_template(environment: str = "development") -> str:
         f"AGENT_ETL_DATA_DIR={'./data' if environment == 'development' else '/opt/agent_etl/data'}",
         f"AGENT_ETL_OUTPUT_DIR={'./output' if environment == 'development' else '/opt/agent_etl/output'}",
     ]
-    
+
     if environment == "production":
         template_lines.extend([
             "",
@@ -439,10 +438,10 @@ def generate_env_template(environment: str = "development") -> str:
             "",
             "# Production secret management example:",
             "# AGENT_ETL_SECRET_PROVIDER=aws_secrets",
-            "# AGENT_ETL_AWS_SECRETS_REGION=us-east-1", 
+            "# AGENT_ETL_AWS_SECRETS_REGION=us-east-1",
             "# AGENT_ETL_AWS_SECRETS_PREFIX=myapp/prod/",
         ])
-    
+
     return "\n".join(template_lines)
 
 
@@ -460,31 +459,31 @@ def create_config_package(
     """
     if environments is None:
         environments = ["development", "staging", "production"]
-    
+
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Generate configuration files for each environment
     for env in environments:
         # YAML config
         yaml_path = output_dir / f"config-{env}.yaml"
         save_config_template(yaml_path, "yaml", env, overwrite)
-        
+
         # JSON config
         json_path = output_dir / f"config-{env}.json"
         save_config_template(json_path, "json", env, overwrite)
-        
+
         # Environment variables
         env_path = output_dir / f".env.{env}"
         if not env_path.exists() or overwrite:
             env_path.write_text(generate_env_template(env), encoding="utf-8")
-    
+
     # Generate Docker Compose files
     for env in environments:
         compose_path = output_dir / f"docker-compose.{env}.yml"
         if not compose_path.exists() or overwrite:
             compose_path.write_text(generate_docker_compose_template(env), encoding="utf-8")
-    
+
     # Create README
     readme_path = output_dir / "README.md"
     if not readme_path.exists() or overwrite:
@@ -530,7 +529,7 @@ This directory contains configuration templates for different environments.
 def main():
     """CLI interface for configuration template generation."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Generate configuration templates")
     parser.add_argument("--format", choices=["yaml", "json"], default="yaml",
                        help="Output format")
@@ -542,9 +541,9 @@ def main():
                        help="Create complete config package in directory")
     parser.add_argument("--overwrite", action="store_true",
                        help="Overwrite existing files")
-    
+
     args = parser.parse_args()
-    
+
     if args.package:
         create_config_package(args.package, overwrite=args.overwrite)
         print(f"Configuration package created in: {args.package}")

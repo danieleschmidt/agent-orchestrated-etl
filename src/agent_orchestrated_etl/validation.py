@@ -27,20 +27,20 @@ def validate_dag_id(dag_id: str) -> str:
     """
     if not dag_id:
         raise ValidationError("DAG ID cannot be empty")
-    
+
     if len(dag_id) > 200:
         raise ValidationError("DAG ID cannot exceed 200 characters")
-    
+
     # DAG ID should contain only alphanumeric characters, underscores, and hyphens
     if not re.match(r'^[a-zA-Z0-9_-]+$', dag_id):
         raise ValidationError(
             "DAG ID can only contain alphanumeric characters, underscores, and hyphens"
         )
-    
+
     # Must start with a letter or underscore
     if not re.match(r'^[a-zA-Z_]', dag_id):
         raise ValidationError("DAG ID must start with a letter or underscore")
-    
+
     return dag_id
 
 
@@ -58,16 +58,16 @@ def validate_task_name(task_name: str) -> str:
     """
     if not task_name:
         raise ValidationError("Task name cannot be empty")
-    
+
     if len(task_name) > 250:
         raise ValidationError("Task name cannot exceed 250 characters")
-    
+
     # Task name should contain only alphanumeric characters, underscores, and hyphens
     if not re.match(r'^[a-zA-Z0-9_-]+$', task_name):
         raise ValidationError(
             "Task name can only contain alphanumeric characters, underscores, and hyphens"
         )
-    
+
     return task_name
 
 
@@ -86,22 +86,22 @@ def validate_file_path(file_path: str, *, allow_creation: bool = True) -> str:
     """
     if not file_path:
         raise ValidationError("File path cannot be empty")
-    
+
     # Check for dangerous characters
     dangerous_chars = ['\0', '\n', '\r']
     if any(char in file_path for char in dangerous_chars):
         raise ValidationError("File path contains invalid characters")
-    
+
     # Prevent command injection attempts
     if file_path.startswith('-'):
         raise ValidationError("File path cannot start with a dash")
-    
+
     # Convert to Path object for safer handling
     try:
         path = Path(file_path).resolve()
     except (OSError, ValueError) as e:
         raise ValidationError(f"Invalid file path: {e}")
-    
+
     # Check for directory traversal attempts
     try:
         # Ensure the resolved path is within reasonable bounds
@@ -112,21 +112,21 @@ def validate_file_path(file_path: str, *, allow_creation: bool = True) -> str:
             pass
     except (OSError, ValueError):
         raise ValidationError("Potentially unsafe file path detected")
-    
+
     # Check if file exists when required
     if not allow_creation and not path.exists():
         raise ValidationError(f"File does not exist: {file_path}")
-    
+
     # Check if parent directory exists for new files
     if allow_creation and not path.parent.exists():
         raise ValidationError(f"Parent directory does not exist: {path.parent}")
-    
+
     # Validate file extension for output files
     if allow_creation and path.suffix:
         allowed_extensions = {'.py', '.json', '.log', '.txt', '.yml', '.yaml'}
         if path.suffix.lower() not in allowed_extensions:
             raise ValidationError(f"File extension '{path.suffix}' not allowed")
-    
+
     return str(path)
 
 
@@ -145,9 +145,9 @@ def validate_source_type(source_type: str, supported_sources: set[str]) -> str:
     """
     if not source_type:
         raise ValidationError("Source type cannot be empty")
-    
+
     normalized = source_type.lower().strip()
-    
+
     # Check for SQL injection patterns in source type
     sql_patterns = [
         r"['\";]",  # SQL injection characters
@@ -155,14 +155,14 @@ def validate_source_type(source_type: str, supported_sources: set[str]) -> str:
         r"--",  # SQL comments
         r"/\*.*\*/",  # SQL block comments
     ]
-    
+
     for pattern in sql_patterns:
         if re.search(pattern, normalized, re.IGNORECASE):
             raise ValidationError("Source type contains potentially malicious content")
-    
+
     if normalized not in supported_sources:
         raise ValidationError(f"Unsupported source type: {source_type}")
-    
+
     return normalized
 
 
@@ -223,11 +223,11 @@ def sanitize_json_output(data: Any) -> Any:
             r'secret\s*[=:]\s*\S+',
             r'key\s*[=:]\s*\S+',
         ]
-        
+
         for pattern in sensitive_patterns:
             if re.search(pattern, data, re.IGNORECASE):
                 return "[REDACTED - SENSITIVE DATA DETECTED]"
-        
+
         return data
     else:
         return data
@@ -248,22 +248,22 @@ def validate_environment_variable(var_name: str, value: str | None = None) -> st
     """
     if not var_name:
         raise ValidationError("Environment variable name cannot be empty")
-    
+
     # Validate variable name format
     if not re.match(r'^[A-Z][A-Z0-9_]*$', var_name):
         raise ValidationError(
             "Environment variable name must start with a letter and contain only "
             "uppercase letters, numbers, and underscores"
         )
-    
+
     if value is None:
         value = os.getenv(var_name)
-    
+
     if value is None:
         raise ValidationError(f"Environment variable {var_name} is not set")
-    
+
     # Basic validation to prevent obvious injection attempts
     if any(char in value for char in ['\0', '\n', '\r']):
         raise ValidationError(f"Environment variable {var_name} contains invalid characters")
-    
+
     return value

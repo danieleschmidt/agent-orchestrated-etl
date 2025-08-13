@@ -1,10 +1,10 @@
 """Tests for SQL injection security fixes."""
 
-import pytest
-from sqlalchemy import create_engine, text
-import tempfile
 import os
-from unittest.mock import patch, MagicMock
+import tempfile
+from unittest.mock import MagicMock, patch
+
+from sqlalchemy import create_engine, text
 
 from agent_orchestrated_etl.orchestrator import DataLoader
 
@@ -18,7 +18,7 @@ class TestSQLInjectionSecurity:
         self.db_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
         self.db_file.close()
         self.connection_string = f"sqlite:///{self.db_file.name}"
-        
+
         # Create test table
         engine = create_engine(self.connection_string)
         with engine.begin() as conn:
@@ -46,10 +46,10 @@ class TestSQLInjectionSecurity:
     def test_malicious_table_name_injection_attempt(self):
         """Test that malicious table names are properly handled."""
         loader = DataLoader()
-        
+
         # Attempt SQL injection through table name
         malicious_table_name = "test_table; DROP TABLE test_table; --"
-        
+
         data = [{"id": 999, "name": "Evil User", "email": "evil@example.com"}]
         config = {
             "connection_string": self.connection_string,
@@ -57,13 +57,13 @@ class TestSQLInjectionSecurity:
             "operation": "upsert",
             "primary_key": ["id"]
         }
-        
+
         # This should fail safely without executing the injection
         result = loader.load(data, config)
-        
+
         # Verify the operation failed safely
         assert result["status"] == "error"
-        
+
         # Verify original table still exists by querying it
         engine = create_engine(self.connection_string)
         with engine.begin() as conn:
@@ -73,7 +73,7 @@ class TestSQLInjectionSecurity:
     def test_malicious_column_name_injection_attempt(self):
         """Test that malicious column names are properly handled."""
         loader = DataLoader()
-        
+
         # Attempt SQL injection through column names
         data = [{
             "id": 999,
@@ -86,10 +86,10 @@ class TestSQLInjectionSecurity:
             "operation": "upsert",
             "primary_key": ["id"]
         }
-        
+
         # This should fail safely without executing the injection
         result = loader.load(data, config)
-        
+
         # Should either succeed with escaped column name or fail safely
         # In either case, table should not be dropped
         engine = create_engine(self.connection_string)
@@ -100,7 +100,7 @@ class TestSQLInjectionSecurity:
     def test_input_validation_prevents_injection(self):
         """Test that input validation prevents SQL injection attempts."""
         loader = DataLoader()
-        
+
         # Test with invalid table name characters
         invalid_table_names = [
             "table'; DROP TABLE users; --",
@@ -109,16 +109,16 @@ class TestSQLInjectionSecurity:
             "../../../etc/passwd",
             "table\x00DROP",
         ]
-        
+
         for malicious_name in invalid_table_names:
             config = {
                 "connection_string": self.connection_string,
                 "table_name": malicious_name,
                 "operation": "insert"
             }
-            
+
             result = loader.load([{"id": 1, "name": "test"}], config)
-            
+
             # Should fail with validation error, not execute malicious SQL
             assert result["status"] == "error"
             assert "validation" in result.get("error_message", "").lower() or \
@@ -127,7 +127,7 @@ class TestSQLInjectionSecurity:
     def test_safe_upsert_with_valid_data(self):
         """Test that legitimate upsert operations work correctly."""
         loader = DataLoader()
-        
+
         # Test legitimate upsert
         data = [
             {"id": 1, "name": "John Updated", "email": "john.updated@example.com"},
@@ -139,13 +139,13 @@ class TestSQLInjectionSecurity:
             "operation": "upsert",
             "primary_key": ["id"]
         }
-        
+
         result = loader.load(data, config)
-        
+
         # Should succeed
         assert result["status"] == "completed"
         assert result["records_loaded"] == 2
-        
+
         # Verify data was properly upserted
         engine = create_engine(self.connection_string)
         with engine.begin() as conn:
@@ -154,13 +154,13 @@ class TestSQLInjectionSecurity:
                 "SELECT name FROM test_table WHERE id = 1"
             )).fetchone()
             assert updated[0] == "John Updated"
-            
+
             # Check new record
             new_record = conn.execute(text(
                 "SELECT name FROM test_table WHERE id = 3"
             )).fetchone()
             assert new_record[0] == "New User"
-            
+
             # Check total count
             total = conn.execute(text("SELECT COUNT(*) FROM test_table")).fetchone()
             assert total[0] == 3
@@ -168,14 +168,14 @@ class TestSQLInjectionSecurity:
     def test_column_name_validation(self):
         """Test that column names are properly validated."""
         loader = DataLoader()
-        
+
         # Test with suspicious column names that should be rejected
         suspicious_columns = [
             "name'; DROP TABLE test_table; --",
             "UNION SELECT password FROM users",
             "name, (SELECT secret FROM admin_table)",
         ]
-        
+
         for suspicious_col in suspicious_columns:
             data = [{suspicious_col: "some_value", "id": 999}]
             config = {
@@ -183,9 +183,9 @@ class TestSQLInjectionSecurity:
                 "table_name": "test_table",
                 "operation": "insert"
             }
-            
+
             result = loader.load(data, config)
-            
+
             # Should handle gracefully - either escape properly or reject
             # Main requirement: should not execute injection
             if result["status"] == "error":
@@ -202,10 +202,10 @@ class TestSQLInjectionSecurity:
     def test_parametrized_queries_used(self):
         """Test that parametrized queries are actually being used."""
         loader = DataLoader()
-        
+
         with patch('sqlalchemy.engine.base.Connection.execute') as mock_execute:
             mock_execute.return_value = MagicMock()
-            
+
             data = [{"id": 1, "name": "Test User", "email": "test@example.com"}]
             config = {
                 "connection_string": self.connection_string,
@@ -213,17 +213,17 @@ class TestSQLInjectionSecurity:
                 "operation": "upsert",
                 "primary_key": ["id"]
             }
-            
+
             try:
                 loader._load_to_database(data, config)
             except Exception:
                 # We expect this to fail due to mocking, but we want to check the SQL
                 pass
-            
+
             # Verify that execute was called with text() object (parameterized)
             assert mock_execute.called
             call_args = mock_execute.call_args_list
-            
+
             # Should be called with sqlalchemy.text() objects, not raw strings
             for call in call_args:
                 if call[0]:  # If there are positional arguments

@@ -1,7 +1,6 @@
 """API endpoints for monitoring and observability."""
 
 import asyncio
-from typing import Dict, Any
 
 from aiohttp import web
 from aiohttp.web import Request, Response, json_response
@@ -27,10 +26,10 @@ async def ready_endpoint(request: Request) -> Response:
     try:
         # Check if critical dependencies are available
         health_status = await health_checker.get_health_status()
-        
+
         # Consider ready if not unhealthy
         is_ready = health_status.status in ["healthy", "degraded"]
-        
+
         if is_ready:
             return json_response({"status": "ready", "message": "Service is ready"})
         else:
@@ -49,7 +48,7 @@ async def metrics_endpoint(request: Request) -> Response:
     """Prometheus metrics endpoint."""
     try:
         metrics_format = request.query.get("format", "prometheus")
-        
+
         if metrics_format == "prometheus":
             metrics_text = metrics_collector.get_prometheus_format()
             return Response(
@@ -86,7 +85,7 @@ async def pipeline_status_endpoint(request: Request) -> Response:
     try:
         # This would integrate with the actual pipeline management system
         pipeline_id = request.query.get("pipeline_id")
-        
+
         if pipeline_id:
             # Return specific pipeline status
             return json_response({
@@ -130,7 +129,7 @@ if __name__ == "__main__":
         site = web.TCPSite(runner, "0.0.0.0", 8793)
         await site.start()
         print("Monitoring server started on http://0.0.0.0:8793")
-        
+
         # Keep the server running
         try:
             await asyncio.Event().wait()
@@ -138,5 +137,5 @@ if __name__ == "__main__":
             pass
         finally:
             await runner.cleanup()
-    
+
     asyncio.run(main())

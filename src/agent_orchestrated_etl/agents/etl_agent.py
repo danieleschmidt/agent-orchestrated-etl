@@ -2,37 +2,30 @@
 
 from __future__ import annotations
 
-import json
-import time
-import os
-import psutil
 import asyncio
+import json
 import threading
-import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional, Union
-from dataclasses import dataclass
-import aiohttp
+import time
+from typing import Any, Dict, List, Optional
 
 from langchain_core.language_models.base import BaseLanguageModel
 
-from .base_agent import BaseAgent, AgentConfig, AgentRole, AgentTask, AgentCapability
-from .communication import AgentCommunicationHub
-from .memory import AgentMemory, MemoryType, MemoryImportance
-from .tools import AgentToolRegistry, get_tool_registry
-from .etl_extraction_ops import ETLExtractionOperations
-from .etl_transformation_ops import ETLTransformationOperations
-from .etl_loading_ops import ETLLoadingOperations
-from .etl_profiling_ops import ETLProfilingOperations
-from .etl_config import ProfilingConfig, ColumnProfile
-from .etl_thread_safety import ThreadSafeMetrics, ThreadSafeOperationTracker
 from ..exceptions import AgentException, DataProcessingException
 from ..logging_config import LogContext
-
+from .base_agent import AgentCapability, AgentConfig, AgentRole, AgentTask, BaseAgent
+from .communication import AgentCommunicationHub
+from .etl_extraction_ops import ETLExtractionOperations
+from .etl_loading_ops import ETLLoadingOperations
+from .etl_profiling_ops import ETLProfilingOperations
+from .etl_thread_safety import ThreadSafeMetrics, ThreadSafeOperationTracker
+from .etl_transformation_ops import ETLTransformationOperations
+from .memory import AgentMemory, MemoryImportance, MemoryType
+from .tools import AgentToolRegistry, get_tool_registry
 
 
 class ETLAgent(BaseAgent, ETLExtractionOperations):
     """ETL specialist agent for performing specific ETL operations."""
-    
+
     def __init__(
         self,
         config: Optional[AgentConfig] = None,
@@ -51,12 +44,12 @@ class ETLAgent(BaseAgent, ETLExtractionOperations):
             )
         elif config.role != AgentRole.ETL_SPECIALIST:
             config.role = AgentRole.ETL_SPECIALIST
-        
+
         # ETL-specific attributes (set before super() call as _initialize_agent uses them)
         self.specialization = specialization
-        
+
         super().__init__(config, llm, communication_hub)
-        
+
         # ETL-specific components
         self.tool_registry = tool_registry or get_tool_registry()
         self.memory = AgentMemory(
@@ -64,39 +57,39 @@ class ETLAgent(BaseAgent, ETLExtractionOperations):
             max_entries=20000,
             working_memory_size=100,
         )
-        
+
         # Initialize transformation operations
         self.transformation_ops = ETLTransformationOperations(logger=self.logger)
-        
+
         # Initialize loading operations
         self.loading_ops = ETLLoadingOperations(logger=self.logger, specialization=specialization)
-        
+
         # Initialize profiling operations
         self.profiling_ops = ETLProfilingOperations(logger=self.logger)
-        
+
         # ETL specialization
         self.specialization = specialization
         self.supported_operations = self._get_supported_operations(specialization)
-        
+
         # Thread safety components
         self._etl_lock = threading.RLock()
         self._etl_async_lock = asyncio.Lock()
-        
+
         # Thread-safe ETL state tracking
         self.active_extractions = ThreadSafeOperationTracker()
         self.active_transformations = ThreadSafeOperationTracker()
-        
+
         # Thread-safe performance tracking
         self.etl_metrics = ThreadSafeMetrics()
-    
+
     def _initialize_agent(self) -> None:
         """Initialize ETL agent-specific components."""
         self.logger.info(f"Initializing ETL Agent with specialization: {self.specialization}")
-    
+
     def _get_supported_operations(self, specialization: str) -> List[str]:
         """Get supported operations based on specialization."""
         base_operations = ["extract", "transform", "load", "validate"]
-        
+
         specialization_map = {
             "general": base_operations + ["data_profiling", "schema_analysis"],
             "database": base_operations + ["sql_query", "schema_migration", "index_optimization"],
@@ -105,13 +98,13 @@ class ETLAgent(BaseAgent, ETLExtractionOperations):
             "streaming": base_operations + ["stream_processing", "real_time_validation", "windowing"],
             "bigdata": base_operations + ["distributed_processing", "partition_optimization", "aggregation"],
         }
-        
+
         return specialization_map.get(specialization, base_operations)
-    
+
     async def _process_task(self, task: AgentTask) -> Dict[str, Any]:
         """Process ETL-specific tasks."""
         task_type = task.task_type.lower()
-        
+
         with LogContext(task_type=task_type, specialization=self.specialization):
             if task_type == "extract_data":
                 return await self._extract_data(task)
@@ -131,7 +124,7 @@ class ETLAgent(BaseAgent, ETLExtractionOperations):
                 return await self._handle_stream(task)
             else:
                 return await self._handle_generic_etl_task(task)
-    
+
     def get_system_prompt(self) -> str:
         """Get the system prompt for the ETL agent."""
         return f"""You are an intelligent ETL Specialist Agent with expertise in {self.specialization} operations.
@@ -163,17 +156,17 @@ Always provide detailed information about:
 - Recommendations for optimization
 
 Respond with structured data when appropriate, including metrics and status information."""
-    
+
     # Extraction methods are now provided by ETLExtractionOperations mixin
-    
+
     async def _transform_data(self, task: AgentTask) -> Dict[str, Any]:
         """Transform data according to specified rules using transformation operations."""
         self.logger.info("Starting data transformation")
-        
+
         try:
             # Use the transformation operations module
             result = await self.transformation_ops.transform_data(task.inputs)
-            
+
             # Update ETL metrics
             if result.get("status") == "completed":
                 transformation_info = {
@@ -184,47 +177,47 @@ Respond with structured data when appropriate, including metrics and status info
                     "records_transformed": result.get("records_transformed", 0),
                 }
                 self._update_etl_metrics("transform", transformation_info)
-                
+
                 # Store transformation results in memory
                 await self._store_etl_memory("transformation", {
                     "transformation_config": task.inputs.get("transformation_config", {}),
                     "result": result,
                     "timestamp": time.time(),
                 })
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Data transformation failed: {e}", exc_info=e)
             raise DataProcessingException(f"Data transformation failed: {e}") from e
-    
+
     async def _load_data(self, task: AgentTask) -> Dict[str, Any]:
         """Load data into target destination using loading operations."""
         try:
             # Use the loading operations module
             result = await self.loading_ops.load_data(task.inputs)
-            
+
             # Store load results in memory
             await self._store_etl_memory("load", {
                 "load_config": task.inputs.get("target_config", {}),
                 "result": result,
                 "timestamp": time.time(),
             })
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Data loading failed: {e}", exc_info=e)
             raise DataProcessingException(f"Data loading failed: {e}") from e
-    
+
     async def _validate_data(self, task: AgentTask) -> Dict[str, Any]:
         """Validate data quality and integrity."""
         self.logger.info("Starting data validation")
-        
+
         try:
             data_source = task.inputs.get("data_source")
             validation_rules = task.inputs.get("validation_rules", [])
-            
+
             # Use data quality validation tool
             result = await self._use_tool("validate_data_quality", {
                 "data_source": data_source,
@@ -232,7 +225,7 @@ Respond with structured data when appropriate, including metrics and status info
                 "sample_percentage": task.inputs.get("sample_percentage", 10.0),
                 "fail_on_errors": task.inputs.get("fail_on_errors", False),
             })
-            
+
             # Store validation results in memory
             await self._store_etl_memory("validation", {
                 "data_source": data_source,
@@ -240,22 +233,22 @@ Respond with structured data when appropriate, including metrics and status info
                 "result": result,
                 "timestamp": time.time(),
             })
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Data validation failed: {e}", exc_info=e)
             raise DataProcessingException(f"Data validation failed: {e}") from e
-    
+
     async def _profile_data(self, task: AgentTask) -> Dict[str, Any]:
         """Profile data to understand structure and quality using advanced algorithms."""
         try:
             data_source = task.inputs.get("data_source")
             profiling_config_dict = task.inputs.get("profiling_config", {})
-            
+
             # Use the profiling operations module
             result = await self.profiling_ops.profile_data(data_source, profiling_config_dict)
-            
+
             # Store profiling results in memory
             await self._store_etl_memory("profiling", {
                 "data_source": data_source,
@@ -263,21 +256,21 @@ Respond with structured data when appropriate, including metrics and status info
                 "result": result,
                 "timestamp": time.time(),
             })
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Data profiling failed: {e}", exc_info=e)
             raise DataProcessingException(f"Data profiling failed: {e}") from e
-    
+
     async def _optimize_query(self, task: AgentTask) -> Dict[str, Any]:
         """Optimize database queries for better performance."""
         if self.specialization != "database":
             raise AgentException("Query optimization is only available for database specialists")
-        
+
         query = task.inputs.get("query")
         optimization_hints = task.inputs.get("optimization_hints", [])
-        
+
         # Analyze and optimize query (simplified)
         optimization_result = {
             "original_query": query,
@@ -290,17 +283,17 @@ Respond with structured data when appropriate, including metrics and status info
             "estimated_performance_gain": "30%",
             "recommendations": optimization_hints,
         }
-        
+
         return optimization_result
-    
+
     async def _process_file(self, task: AgentTask) -> Dict[str, Any]:
         """Process file-based data operations."""
         if self.specialization != "file":
             raise AgentException("File processing is only available for file specialists")
-        
+
         file_path = task.inputs.get("file_path")
         operation = task.inputs.get("operation", "parse")
-        
+
         # Process file based on operation
         processing_result = {
             "file_path": file_path,
@@ -309,17 +302,17 @@ Respond with structured data when appropriate, including metrics and status info
             "result": f"File {operation} completed successfully",
             "processing_time": 2.5,  # Placeholder
         }
-        
+
         return processing_result
-    
+
     async def _handle_stream(self, task: AgentTask) -> Dict[str, Any]:
         """Handle streaming data operations."""
         if self.specialization != "streaming":
             raise AgentException("Stream processing is only available for streaming specialists")
-        
+
         stream_config = task.inputs.get("stream_config", {})
         operation = task.inputs.get("operation", "process")
-        
+
         # Handle stream processing
         stream_result = {
             "stream_config": stream_config,
@@ -328,14 +321,14 @@ Respond with structured data when appropriate, including metrics and status info
             "records_processed": 500,  # Placeholder
             "processing_rate": "100 records/second",
         }
-        
+
         return stream_result
-    
+
     async def _handle_generic_etl_task(self, task: AgentTask) -> Dict[str, Any]:
         """Handle generic ETL tasks using LLM reasoning."""
         task_description = task.description
         task_inputs = task.inputs
-        
+
         # Use LLM to process the task
         etl_prompt = f"""You are an ETL Specialist Agent with {self.specialization} expertise. Process this ETL task:
 
@@ -353,95 +346,95 @@ Analyze the task and provide:
 
 If this is a task you can complete directly, provide the solution with specific ETL details.
 Otherwise, explain what additional information or resources would be needed."""
-        
+
         llm_response = await self.query_llm(etl_prompt)
-        
+
         return {
             "task_type": task.task_type,
             "specialization": self.specialization,
             "analysis": llm_response,
             "processed_at": time.time(),
         }
-    
+
     # Specialized extraction methods
     # All extraction methods are now provided by ETLExtractionOperations mixin class
-    
+
     # Transformation methods now handled by ETLTransformationOperations
     # Direct access methods for backward compatibility
     async def _apply_field_mapping(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply field mapping transformations."""
         return await self.transformation_ops.apply_field_mapping(source_data, rules)
-    
+
     async def _apply_aggregation(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply aggregation transformations."""
         return await self.transformation_ops.apply_aggregation(source_data, rules)
-    
+
     async def _apply_filtering(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply filtering transformations."""
         return await self.transformation_ops.apply_filtering(source_data, rules)
-    
+
     async def _apply_enrichment(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply data enrichment transformations."""
         return await self.transformation_ops.apply_enrichment(source_data, rules)
-    
+
     async def _apply_generic_transformation(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply generic transformations."""
         return await self.transformation_ops.apply_generic_transformation(source_data, rules)
-    
+
     # Additional transformation methods available through transformation_ops
     async def _apply_data_cleaning(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply data cleaning transformations."""
         return await self.transformation_ops.apply_data_cleaning(source_data, rules)
-    
+
     async def _apply_data_validation(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply data validation transformations."""
         return await self.transformation_ops.apply_data_validation(source_data, rules)
-    
+
     async def _apply_data_normalization(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply data normalization transformations."""
         return await self.transformation_ops.apply_data_normalization(source_data, rules)
-    
+
     async def _apply_deduplication(self, source_data: Any, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Apply deduplication transformations."""
         return await self.transformation_ops.apply_deduplication(source_data, rules)
-    
+
     # Loading methods now handled by ETLLoadingOperations
     # Direct access methods for backward compatibility
     async def _load_to_database(self, source_data: Any, target_config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to database targets."""
         return await self.loading_ops._load_to_database(source_data, target_config)
-    
+
     async def _load_to_file(self, source_data: Any, target_config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to file targets."""
         return await self.loading_ops._load_to_file(source_data, target_config)
-    
+
     async def _load_to_api(self, source_data: Any, target_config: Dict[str, Any]) -> Dict[str, Any]:
         """Load data to API targets."""
         return await self.loading_ops._load_to_api(source_data, target_config)
-    
+
     async def _load_generic(self, source_data: Any, target_config: Dict[str, Any]) -> Dict[str, Any]:
         """Generic data loading."""
         return await self.loading_ops._load_generic(source_data, target_config)
-    
+
     async def _use_tool(self, tool_name: str, tool_inputs: Dict[str, Any]) -> Any:
         """Use a tool from the registry."""
         tool = self.tool_registry.get_tool(tool_name)
         if not tool:
             raise AgentException(f"Tool {tool_name} not found in registry")
-        
+
         try:
             result = await tool._arun(**tool_inputs)
-            
+
             # Try to parse JSON result
             try:
                 return json.loads(result)
             except json.JSONDecodeError:
                 return {"raw_result": result}
-                
+
         except Exception as e:
             self.logger.error(f"Tool {tool_name} execution failed: {e}")
             raise AgentException(f"Tool execution failed: {e}") from e
-    
+
     async def _store_etl_memory(self, operation_type: str, operation_info: Dict[str, Any]) -> None:
         """Store ETL operation information in memory."""
         self.memory.store_memory(
@@ -455,28 +448,28 @@ Otherwise, explain what additional information or resources would be needed."""
             importance=MemoryImportance.HIGH,
             tags={operation_type, "etl", self.specialization},
         )
-    
+
     def _update_etl_metrics(self, operation_type: str, operation_info: Dict[str, Any]) -> None:
         """Update ETL performance metrics in a thread-safe manner."""
         if operation_type in ["extract", "transform", "load"]:
             records_key = f"records_{operation_type}ed"
             records_processed = operation_info.get(records_key, 0)
-            
+
             if records_processed > 0:
                 # Thread-safe metric updates
                 self.etl_metrics.increment("records_processed", records_processed)
-                
+
                 # Update processing time
                 operation_time = operation_info.get("completed_at", 0) - operation_info.get("started_at", 0)
                 self.etl_metrics.increment("total_processing_time", operation_time)
-                
+
                 # Calculate average throughput (thread-safe)
                 self.etl_metrics.update_throughput()
-    
+
     async def _register_default_capabilities(self) -> None:
         """Register ETL-specific capabilities."""
         await super()._register_default_capabilities()
-        
+
         base_capabilities = [
             AgentCapability(
                 name="data_extraction",
@@ -507,7 +500,7 @@ Otherwise, explain what additional information or resources would be needed."""
                 confidence_level=0.85,
             ),
         ]
-        
+
         # Add specialization-specific capabilities
         specialization_capabilities = {
             "database": [
@@ -547,19 +540,19 @@ Otherwise, explain what additional information or resources would be needed."""
                 )
             ],
         }
-        
+
         # Add base capabilities
         for capability in base_capabilities:
             self.add_capability(capability)
-        
+
         # Add specialization-specific capabilities
         for capability in specialization_capabilities.get(self.specialization, []):
             self.add_capability(capability)
-    
+
     def get_etl_status(self) -> Dict[str, Any]:
         """Get detailed ETL agent status."""
         base_status = self.get_status()
-        
+
         etl_status = {
             **base_status,
             "specialization": self.specialization,
@@ -572,5 +565,5 @@ Otherwise, explain what additional information or resources would be needed."""
             "transformation_metrics": self.transformation_ops.get_transformation_metrics() if hasattr(self, 'transformation_ops') else {},
             "memory_entries": self.memory.get_memory_summary()["total_memories"],
         }
-        
+
         return etl_status

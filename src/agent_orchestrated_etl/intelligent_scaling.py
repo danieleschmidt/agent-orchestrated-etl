@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import time
-import asyncio
-import psutil
-from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
-import threading
+from typing import Any, Dict, List
 
 from .logging_config import get_logger
 
@@ -49,20 +45,20 @@ class ScalingConfig:
 
 class IntelligentScaler:
     """Intelligent auto-scaling with predictive capabilities."""
-    
+
     def __init__(self, config: ScalingConfig):
         self.config = config
         self.logger = get_logger("intelligent_scaler")
         self.current_instances = 1
         self.scaling_history: List[Dict[str, Any]] = []
-        
+
     def get_scaling_recommendation(self, current_metrics: Dict[str, float]) -> Dict[str, Any]:
         """Get intelligent scaling recommendation."""
-        
+
         # Basic rule-based scaling
         for rule in self.config.rules:
             metric_value = current_metrics.get(rule.metric.value, 0)
-            
+
             if metric_value > rule.threshold_up:
                 return {
                     "action": "scale_up",
@@ -77,7 +73,7 @@ class IntelligentScaler:
                     "confidence": 0.7,
                     "reason": f"Low {rule.metric.value}: {metric_value}"
                 }
-        
+
         return {
             "action": "none",
             "target_instances": self.current_instances,
