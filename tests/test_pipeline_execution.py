@@ -1,6 +1,7 @@
 """Test real pipeline execution functionality."""
 
 import pytest
+
 from src.agent_orchestrated_etl.agents.tools import ExecutePipelineTool
 from src.agent_orchestrated_etl.exceptions import ToolException
 
@@ -33,7 +34,7 @@ class TestPipelineExecution:
                 },
                 {
                     "task_id": "transform_data",
-                    "task_type": "transform", 
+                    "task_type": "transform",
                     "operator": "PythonOperator",
                     "config": {
                         "python_callable": "transform_functions.clean_data"
@@ -43,7 +44,7 @@ class TestPipelineExecution:
                 {
                     "task_id": "load_data",
                     "task_type": "load",
-                    "operator": "PostgresToS3Operator", 
+                    "operator": "PostgresToS3Operator",
                     "config": {
                         "source": "postgres://db/table",
                         "destination": "s3://bucket/processed/"
@@ -61,23 +62,23 @@ class TestPipelineExecution:
             monitor_progress=True,
             timeout_seconds=1800
         )
-        
+
         # Verify execution result structure
         assert "execution_id" in result
         assert result["dag_id"] == "test_pipeline_123"
         assert result["execution_mode"] == "sync"
         assert result["status"] in ["completed", "running"]
         assert result["start_time"] > 0
-        
+
         # Verify task execution results
         assert "task_results" in result
         task_results = result["task_results"]
         assert len(task_results) == 3
-        
+
         # Verify task execution order
         task_order = [tr["task_id"] for tr in task_results]
         assert task_order == ["extract_data", "transform_data", "load_data"]
-        
+
         # Verify each task has required fields
         for task_result in task_results:
             assert "task_id" in task_result
@@ -93,12 +94,12 @@ class TestPipelineExecution:
             execution_mode="async",
             monitor_progress=False
         )
-        
+
         # Verify async execution result
         assert result["execution_mode"] == "async"
         assert result["status"] == "running"
         assert "execution_id" in result
-        
+
         # Async mode should return immediately with running status
         # Task results may not be complete yet
         if "task_results" in result:
@@ -119,7 +120,7 @@ class TestPipelineExecution:
                     "dependencies": []
                 },
                 {
-                    "task_id": "failing_task", 
+                    "task_id": "failing_task",
                     "task_type": "transform",
                     "operator": "FailingOperator",  # This will simulate failure
                     "config": {"simulate_failure": True},
@@ -127,29 +128,29 @@ class TestPipelineExecution:
                 },
                 {
                     "task_id": "dependent_task",
-                    "task_type": "load", 
+                    "task_type": "load",
                     "operator": "DummyOperator",
                     "config": {},
                     "dependencies": ["failing_task"]
                 }
             ]
         }
-        
+
         result = pipeline_tool._execute(
             dag_config=failing_dag_config,
             execution_mode="sync"
         )
-        
+
         # Verify failure handling
         assert result["status"] == "failed"
         assert "error_details" in result
-        
+
         # Verify task states
         task_results = result["task_results"]
         good_task = next(tr for tr in task_results if tr["task_id"] == "good_task")
         failing_task = next(tr for tr in task_results if tr["task_id"] == "failing_task")
         dependent_task = next(tr for tr in task_results if tr["task_id"] == "dependent_task")
-        
+
         assert good_task["status"] == "completed"
         assert failing_task["status"] == "failed"
         assert dependent_task["status"] == "skipped"  # Should be skipped due to dependency failure
@@ -172,16 +173,16 @@ class TestPipelineExecution:
                 }
             ]
         }
-        
+
         result = pipeline_tool._execute(
             dag_config=retry_dag_config,
             execution_mode="sync"
         )
-        
+
         # Verify retry behavior
         task_result = result["task_results"][0]
         assert task_result["task_id"] == "retryable_task"
-        
+
         # Should eventually succeed after retries
         if result["status"] == "completed":
             assert task_result["status"] == "completed"
@@ -202,14 +203,14 @@ class TestPipelineExecution:
                 }
             ]
         }
-        
+
         # Set short timeout
         result = pipeline_tool._execute(
             dag_config=long_running_dag,
             execution_mode="sync",
             timeout_seconds=5  # 5 seconds timeout
         )
-        
+
         # Should timeout
         assert result["status"] == "timeout"
         assert "timeout_details" in result
@@ -222,17 +223,17 @@ class TestPipelineExecution:
             execution_mode="sync",
             monitor_progress=True
         )
-        
+
         # Verify monitoring data is included
         assert "monitoring_data" in result
         monitoring = result["monitoring_data"]
-        
+
         assert "total_tasks" in monitoring
         assert "completed_tasks" in monitoring
         assert "failed_tasks" in monitoring
         assert "progress_percentage" in monitoring
         assert monitoring["total_tasks"] == 3
-        
+
         # Verify resource usage monitoring
         assert "resource_usage" in monitoring
         resource_usage = monitoring["resource_usage"]
@@ -267,16 +268,16 @@ class TestPipelineExecution:
                 }
             ]
         }
-        
+
         result = pipeline_tool._execute(
             dag_config=custom_dag_config,
             execution_mode="sync"
         )
-        
+
         # Should handle custom operators
         assert result["status"] in ["completed", "failed"]
         assert len(result["task_results"]) == 2
-        
+
         # Verify custom operator execution
         for task_result in result["task_results"]:
             assert "operator_type" in task_result
@@ -296,7 +297,7 @@ class TestPipelineExecution:
                 },
                 {
                     "task_id": "extract_source_2",
-                    "task_type": "extract", 
+                    "task_type": "extract",
                     "operator": "S3Operator",
                     "config": {"source": "s3://bucket/source2/"},
                     "dependencies": []
@@ -311,7 +312,7 @@ class TestPipelineExecution:
                 {
                     "task_id": "validate_data",
                     "task_type": "validate",
-                    "operator": "ValidationOperator", 
+                    "operator": "ValidationOperator",
                     "config": {"validation_rules": ["not_null", "unique_key"]},
                     "dependencies": ["merge_sources"]
                 },
@@ -331,23 +332,23 @@ class TestPipelineExecution:
                 }
             ]
         }
-        
+
         result = pipeline_tool._execute(
             dag_config=complex_dag_config,
             execution_mode="sync"
         )
-        
+
         # Verify dependency execution order
         task_results = result["task_results"]
         task_times = {tr["task_id"]: tr["start_time"] for tr in task_results}
-        
+
         # Extract tasks should start first (no dependencies)
         assert task_times["extract_source_1"] <= task_times["merge_sources"]
         assert task_times["extract_source_2"] <= task_times["merge_sources"]
-        
+
         # Merge should start after both extracts
         assert task_times["merge_sources"] <= task_times["validate_data"]
-        
+
         # Loads should start after validation
         assert task_times["validate_data"] <= task_times["load_warehouse"]
         assert task_times["validate_data"] <= task_times["load_data_lake"]
@@ -359,12 +360,12 @@ class TestPipelineExecution:
             "dag_id": "",  # Invalid empty DAG ID
             "tasks": []    # No tasks
         }
-        
+
         with pytest.raises(ToolException) as exc_info:
             pipeline_tool._execute(dag_config=invalid_dag_config)
-        
+
         assert "Pipeline execution failed" in str(exc_info.value)
-        
+
         # Test with malformed task config
         malformed_dag_config = {
             "dag_id": "malformed_pipeline",
@@ -376,7 +377,7 @@ class TestPipelineExecution:
                 }
             ]
         }
-        
+
         with pytest.raises(ToolException):
             pipeline_tool._execute(dag_config=malformed_dag_config)
 
@@ -387,15 +388,15 @@ class TestPipelineExecution:
             execution_mode="sync",
             monitor_progress=True
         )
-        
+
         # Verify resource tracking
         assert "resource_usage" in result["monitoring_data"]
         resource_usage = result["monitoring_data"]["resource_usage"]
-        
+
         # Should track memory and CPU usage
         assert resource_usage["max_memory_mb"] >= 0
         assert resource_usage["total_cpu_seconds"] >= 0
-        
+
         # Should include per-task resource usage
         for task_result in result["task_results"]:
             assert "resource_usage" in task_result
@@ -409,13 +410,13 @@ class TestPipelineExecution:
             dag_config=sample_dag_config,
             execution_mode="async"
         )
-        
+
         execution_id = result["execution_id"]
-        
+
         # Should be able to query execution state
         assert "execution_id" in result
         assert execution_id.startswith("exec_")
-        
+
         # Result should include state information
         assert "execution_state" in result
         state = result["execution_state"]

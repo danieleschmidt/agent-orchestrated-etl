@@ -1,4 +1,5 @@
 import pytest
+
 from agent_orchestrated_etl import orchestrator
 
 
@@ -15,7 +16,7 @@ def test_monitor_logs_pipeline_execution():
 def test_monitor_logs_errors():
     orch = orchestrator.DataOrchestrator()
     # Disable graceful degradation to ensure exception propagation
-    pipeline = orch.create_pipeline("s3", operations={"load": lambda _d: 1 / 0}, 
+    pipeline = orch.create_pipeline("s3", operations={"load": lambda _d: 1 / 0},
                                    enable_graceful_degradation=False)
     monitor = orchestrator.MonitorAgent()
     with pytest.raises(Exception):  # Pipeline wraps exceptions

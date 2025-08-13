@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import os
 import time
@@ -12,7 +11,11 @@ from urllib.parse import urlparse
 try:
     import asyncpg
     import sqlalchemy as sa
-    from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import (
+        AsyncEngine,
+        async_sessionmaker,
+        create_async_engine,
+    )
     from sqlalchemy.orm import DeclarativeBase
     SQLALCHEMY_AVAILABLE = True
 except ImportError:
@@ -24,8 +27,8 @@ except ImportError:
     DeclarativeBase = None
     SQLALCHEMY_AVAILABLE = False
 
+from ..exceptions import ConfigurationError, DatabaseException
 from ..logging_config import get_logger
-from ..exceptions import DatabaseException, ConfigurationError
 
 
 class Base(DeclarativeBase if DeclarativeBase else object):
@@ -35,7 +38,7 @@ class Base(DeclarativeBase if DeclarativeBase else object):
 
 class DatabaseManager:
     """Manages database connections and operations."""
-    
+
     def __init__(
         self,
         database_url: str,
@@ -59,62 +62,62 @@ class DatabaseManager:
         self.max_overflow = max_overflow
         self.pool_timeout = pool_timeout
         self.echo = echo
-        
+
         self._engine: Optional[AsyncEngine] = None
         self._session_factory: Optional[async_sessionmaker] = None
         self._connection_pool: Optional[asyncpg.Pool] = None
         self._is_initialized = False
-        
+
         # Validate configuration
         self._validate_config()
-    
+
     def _validate_config(self) -> None:
         """Validate database configuration."""
         if not self.database_url:
             raise ConfigurationError("Database URL is required")
-        
+
         try:
             parsed = urlparse(self.database_url)
             if not parsed.scheme:
                 raise ConfigurationError("Invalid database URL format")
         except Exception as e:
             raise ConfigurationError(f"Invalid database URL: {e}") from e
-        
+
         if not SQLALCHEMY_AVAILABLE:
             self.logger.warning("SQLAlchemy not available, using mock database operations")
-    
+
     async def initialize(self) -> None:
         """Initialize database connections and setup."""
         if self._is_initialized:
             return
-        
+
         self.logger.info("Initializing database connections...")
-        
+
         try:
             if SQLALCHEMY_AVAILABLE:
                 await self._setup_sqlalchemy()
             await self._setup_asyncpg_pool()
-            
+
             # Test connection
             await self._test_connection()
-            
+
             self._is_initialized = True
             self.logger.info("Database connections initialized successfully")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to initialize database: {e}")
             raise DatabaseException(f"Database initialization failed: {e}") from e
-    
+
     async def _setup_sqlalchemy(self) -> None:
         """Setup SQLAlchemy async engine and session factory."""
         if not SQLALCHEMY_AVAILABLE:
             return
-        
+
         # Convert sync URL to async if needed
         async_url = self.database_url
         if async_url.startswith("postgresql://"):
             async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        
+
         self._engine = create_async_engine(
             async_url,
             pool_size=self.pool_size,
@@ -124,21 +127,21 @@ class DatabaseManager:
             pool_pre_ping=True,
             pool_recycle=3600,  # Recycle connections every hour
         )
-        
+
         self._session_factory = async_sessionmaker(
             bind=self._engine,
             expire_on_commit=False,
         )
-    
+
     async def _setup_asyncpg_pool(self) -> None:
         """Setup asyncpg connection pool for direct PostgreSQL access."""
         if not asyncpg:
             return
-        
+
         try:
             # Parse connection parameters from URL
             parsed = urlparse(self.database_url)
-            
+
             if parsed.scheme.startswith("postgresql"):
                 self._connection_pool = await asyncpg.create_pool(
                     host=parsed.hostname,
@@ -156,7 +159,7 @@ class DatabaseManager:
                 )
         except Exception as e:
             self.logger.warning(f"Failed to setup asyncpg pool: {e}")
-    
+
     async def _test_connection(self) -> None:
         """Test database connection."""
         try:
@@ -170,28 +173,28 @@ class DatabaseManager:
                 self.logger.info("No database connection to test (mock mode)")
         except Exception as e:
             raise DatabaseException(f"Database connection test failed: {e}") from e
-    
+
     async def close(self) -> None:
         """Close database connections."""
         self.logger.info("Closing database connections...")
-        
+
         try:
             if self._connection_pool:
                 await self._connection_pool.close()
                 self._connection_pool = None
-            
+
             if self._engine:
                 await self._engine.dispose()
                 self._engine = None
-            
+
             self._session_factory = None
             self._is_initialized = False
-            
+
             self.logger.info("Database connections closed")
-            
+
         except Exception as e:
             self.logger.error(f"Error closing database connections: {e}")
-    
+
     @contextlib.asynccontextmanager
     async def get_session(self) -> AsyncGenerator[Any, None]:
         """Get an async database session.
@@ -201,12 +204,12 @@ class DatabaseManager:
         """
         if not self._is_initialized:
             await self.initialize()
-        
+
         if not SQLALCHEMY_AVAILABLE or not self._session_factory:
             # Yield a mock session for testing
             yield MockSession()
             return
-        
+
         async with self._session_factory() as session:
             try:
                 yield session
@@ -216,7 +219,7 @@ class DatabaseManager:
                 raise DatabaseException(f"Session error: {e}") from e
             finally:
                 await session.close()
-    
+
     @contextlib.asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[Any, None]:
         """Get a raw database connection.
@@ -226,19 +229,19 @@ class DatabaseManager:
         """
         if not self._is_initialized:
             await self.initialize()
-        
+
         if not self._connection_pool:
             # Yield a mock connection for testing
             yield MockConnection()
             return
-        
+
         async with self._connection_pool.acquire() as conn:
             try:
                 yield conn
             except Exception as e:
                 self.logger.error(f"Database connection error: {e}")
                 raise DatabaseException(f"Connection error: {e}") from e
-    
+
     async def execute_query(
         self,
         query: str,
@@ -257,7 +260,7 @@ class DatabaseManager:
         """
         if not self._is_initialized:
             await self.initialize()
-        
+
         try:
             async with self.get_connection() as conn:
                 if hasattr(conn, 'fetch'):  # asyncpg connection
@@ -272,11 +275,11 @@ class DatabaseManager:
                         return None
                 else:  # Mock connection
                     return [] if fetch_mode == "all" else None
-                    
+
         except Exception as e:
             self.logger.error(f"Query execution failed: {e}")
             raise DatabaseException(f"Query failed: {e}") from e
-    
+
     async def execute_transaction(
         self,
         operations: List[Dict[str, Any]]
@@ -291,9 +294,9 @@ class DatabaseManager:
         """
         if not self._is_initialized:
             await self.initialize()
-        
+
         results = []
-        
+
         try:
             async with self.get_connection() as conn:
                 if hasattr(conn, 'transaction'):  # asyncpg connection
@@ -302,7 +305,7 @@ class DatabaseManager:
                             query = op['query']
                             params = op.get('parameters', {})
                             fetch_mode = op.get('fetch_mode', 'none')
-                            
+
                             if fetch_mode == "all":
                                 rows = await conn.fetch(query, *(params.values() if params else []))
                                 results.append([dict(row) for row in rows])
@@ -314,13 +317,13 @@ class DatabaseManager:
                                 results.append(None)
                 else:  # Mock connection
                     results = [None] * len(operations)
-                    
+
         except Exception as e:
             self.logger.error(f"Transaction failed: {e}")
             raise DatabaseException(f"Transaction failed: {e}") from e
-        
+
         return results
-    
+
     async def get_health_status(self) -> Dict[str, Any]:
         """Get database health status.
         
@@ -329,12 +332,12 @@ class DatabaseManager:
         """
         try:
             start_time = time.time()
-            
+
             # Test basic connectivity
             await self.execute_query("SELECT 1", fetch_mode="one")
-            
+
             response_time = time.time() - start_time
-            
+
             status = {
                 "status": "healthy",
                 "response_time_ms": round(response_time * 1000, 2),
@@ -343,7 +346,7 @@ class DatabaseManager:
                 "sqlalchemy_available": SQLALCHEMY_AVAILABLE,
                 "timestamp": time.time(),
             }
-            
+
             # Add pool statistics if available
             if self._connection_pool and hasattr(self._connection_pool, 'get_size'):
                 status.update({
@@ -351,9 +354,9 @@ class DatabaseManager:
                     "pool_max_size": self._connection_pool.get_max_size(),
                     "pool_min_size": self._connection_pool.get_min_size(),
                 })
-            
+
             return status
-            
+
         except Exception as e:
             return {
                 "status": "unhealthy",
@@ -364,38 +367,38 @@ class DatabaseManager:
 
 class MockSession:
     """Mock session for testing when SQLAlchemy is not available."""
-    
+
     async def commit(self):
         pass
-    
+
     async def rollback(self):
         pass
-    
+
     async def close(self):
         pass
-    
+
     def add(self, obj):
         pass
-    
+
     async def flush(self):
         pass
-    
+
     async def refresh(self, obj):
         pass
 
 
 class MockConnection:
     """Mock connection for testing when asyncpg is not available."""
-    
+
     async def fetch(self, query, *args):
         return []
-    
+
     async def fetchrow(self, query, *args):
         return None
-    
+
     async def execute(self, query, *args):
         return None
-    
+
     @contextlib.asynccontextmanager
     async def transaction(self):
         yield self
@@ -415,12 +418,12 @@ def get_database_manager() -> DatabaseManager:
         ConfigurationError: If database manager is not configured
     """
     global _database_manager
-    
+
     if _database_manager is None:
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ConfigurationError("DATABASE_URL environment variable is required")
-        
+
         _database_manager = DatabaseManager(
             database_url=database_url,
             pool_size=int(os.getenv("DATABASE_POOL_SIZE", "10")),
@@ -428,7 +431,7 @@ def get_database_manager() -> DatabaseManager:
             pool_timeout=int(os.getenv("DATABASE_POOL_TIMEOUT", "30")),
             echo=os.getenv("DATABASE_ECHO", "false").lower() == "true",
         )
-    
+
     return _database_manager
 
 

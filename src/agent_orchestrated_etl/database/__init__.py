@@ -4,9 +4,9 @@ from .connection import DatabaseManager, get_database_manager
 from .migrations import MigrationManager
 from .repositories import (
     AgentRepository,
+    BaseRepository,
     PipelineRepository,
     QualityMetricsRepository,
-    BaseRepository,
 )
 
 __all__ = [

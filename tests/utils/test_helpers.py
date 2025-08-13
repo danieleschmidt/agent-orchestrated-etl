@@ -1,25 +1,26 @@
 """Test helper utilities for agent-orchestrated-etl."""
 
 import asyncio
-import time
-from typing import Any, Dict, List, Optional, Callable, Union
-from unittest.mock import Mock, AsyncMock, patch
-from contextlib import asynccontextmanager, contextmanager
-import tempfile
-import shutil
-from pathlib import Path
 import json
+import shutil
+import tempfile
+import time
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, Mock
+
 import yaml
 
 
 class AsyncTestHelper:
     """Helper for testing async functions and coroutines."""
-    
+
     @staticmethod
     async def run_with_timeout(coro, timeout: float = 5.0):
         """Run coroutine with timeout."""
         return await asyncio.wait_for(coro, timeout=timeout)
-    
+
     @staticmethod
     def create_mock_async_function(return_value: Any = None, side_effect: Any = None) -> AsyncMock:
         """Create a mock async function."""
@@ -33,7 +34,7 @@ class AsyncTestHelper:
 
 class AgentTestHelper:
     """Helper utilities for testing agents."""
-    
+
     @staticmethod
     def create_mock_agent(agent_type: str = "test", agent_id: str = "test-001") -> Mock:
         """Create a mock agent with standard interface."""
@@ -46,7 +47,7 @@ class AgentTestHelper:
         agent.process_message = AsyncMock()
         agent.get_status = Mock(return_value={"status": "idle", "last_activity": time.time()})
         return agent
-    
+
     @staticmethod
     def create_mock_pipeline_config(pipeline_id: str = "test-pipeline") -> Dict[str, Any]:
         """Create a mock pipeline configuration."""
@@ -69,7 +70,7 @@ class AgentTestHelper:
                 "tags": ["test", "mock"]
             }
         }
-    
+
     @staticmethod
     async def wait_for_agent_status(agent: Mock, expected_status: str, timeout: float = 5.0):
         """Wait for agent to reach expected status."""
@@ -83,16 +84,17 @@ class AgentTestHelper:
 
 class DataTestHelper:
     """Helper utilities for testing data operations."""
-    
+
     @staticmethod
     def create_test_dataframe(rows: int = 100) -> 'pd.DataFrame':
         """Create a test DataFrame with sample data."""
-        import pandas as pd
         from datetime import datetime, timedelta
-        
+
+        import pandas as pd
+
         base_date = datetime(2025, 1, 1)
         data = []
-        
+
         for i in range(rows):
             data.append({
                 "id": i + 1,
@@ -102,26 +104,25 @@ class DataTestHelper:
                 "timestamp": base_date + timedelta(hours=i),
                 "is_active": i % 2 == 0
             })
-        
+
         return pd.DataFrame(data)
-    
+
     @staticmethod
-    def assert_dataframes_equal(df1: 'pd.DataFrame', df2: 'pd.DataFrame', 
+    def assert_dataframes_equal(df1: 'pd.DataFrame', df2: 'pd.DataFrame',
                               check_dtype: bool = True, check_index: bool = True):
         """Assert that two DataFrames are equal."""
-        import pandas as pd
         from pandas.testing import assert_frame_equal
-        
+
         assert_frame_equal(df1, df2, check_dtype=check_dtype, check_index=check_index)
-    
+
     @staticmethod
     def create_test_json_data(records: int = 10) -> List[Dict[str, Any]]:
         """Create test JSON data."""
         from datetime import datetime, timedelta
-        
+
         base_date = datetime(2025, 1, 1)
         data = []
-        
+
         for i in range(records):
             data.append({
                 "id": i + 1,
@@ -135,13 +136,13 @@ class DataTestHelper:
                     "tags": [f"tag_{j}" for j in range(i % 3 + 1)]
                 }
             })
-        
+
         return data
 
 
 class MockHelper:
     """Helper utilities for creating mocks."""
-    
+
     @staticmethod
     def create_mock_config(config_dict: Dict[str, Any]) -> Mock:
         """Create a mock configuration object."""
@@ -150,7 +151,7 @@ class MockHelper:
         config.update_runtime_config = Mock()
         config._config_dict = config_dict
         return config
-    
+
     @staticmethod
     def create_mock_database() -> Mock:
         """Create a mock database connection."""
@@ -163,7 +164,7 @@ class MockHelper:
         db.rollback = AsyncMock()
         db.close = AsyncMock()
         return db
-    
+
     @staticmethod
     def create_mock_s3_client() -> Mock:
         """Create a mock S3 client."""
@@ -174,7 +175,7 @@ class MockHelper:
         s3.delete_object = AsyncMock()
         s3.head_object = AsyncMock(return_value={"ContentLength": 1024})
         return s3
-    
+
     @staticmethod
     def create_mock_redis_client() -> Mock:
         """Create a mock Redis client."""
@@ -187,25 +188,25 @@ class MockHelper:
         redis.publish = AsyncMock()
         redis.subscribe = AsyncMock()
         return redis
-    
+
     @staticmethod
     def _get_nested_value(config_dict: Dict[str, Any], key: str, default: Any = None) -> Any:
         """Get nested value from config dictionary."""
         keys = key.split('.')
         value = config_dict
-        
+
         for k in keys:
             if isinstance(value, dict) and k in value:
                 value = value[k]
             else:
                 return default
-        
+
         return value
 
 
 class FileTestHelper:
     """Helper utilities for file-based testing."""
-    
+
     @staticmethod
     @contextmanager
     def temporary_directory():
@@ -215,7 +216,7 @@ class FileTestHelper:
             yield temp_dir
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
-    
+
     @staticmethod
     @contextmanager
     def temporary_file(suffix: str = ".tmp", content: str = ""):
@@ -223,13 +224,13 @@ class FileTestHelper:
         with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
             f.write(content)
             temp_path = Path(f.name)
-        
+
         try:
             yield temp_path
         finally:
             if temp_path.exists():
                 temp_path.unlink()
-    
+
     @staticmethod
     def create_test_files(directory: Path, files: Dict[str, str]):
         """Create multiple test files in a directory."""
@@ -237,7 +238,7 @@ class FileTestHelper:
             file_path = directory / filename
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content)
-    
+
     @staticmethod
     def create_test_config_file(directory: Path, config: Dict[str, Any], format_type: str = "yaml") -> Path:
         """Create a test configuration file."""
@@ -249,7 +250,7 @@ class FileTestHelper:
             content = json.dumps(config, indent=2)
         else:
             raise ValueError(f"Unsupported format: {format_type}")
-        
+
         config_path = directory / filename
         config_path.write_text(content)
         return config_path
@@ -257,7 +258,7 @@ class FileTestHelper:
 
 class PerformanceTestHelper:
     """Helper utilities for performance testing."""
-    
+
     @staticmethod
     @contextmanager
     def time_execution():
@@ -267,7 +268,7 @@ class PerformanceTestHelper:
         end_time = time.perf_counter()
         execution_time = end_time - start_time
         print(f"Execution time: {execution_time:.4f} seconds")
-    
+
     @staticmethod
     async def measure_async_execution_time(coro) -> tuple:
         """Measure async function execution time."""
@@ -276,7 +277,7 @@ class PerformanceTestHelper:
         end_time = time.perf_counter()
         execution_time = end_time - start_time
         return result, execution_time
-    
+
     @staticmethod
     def assert_execution_time_under(seconds: float):
         """Assert that execution time is under specified seconds."""
@@ -304,7 +305,7 @@ class PerformanceTestHelper:
 
 class SecurityTestHelper:
     """Helper utilities for security testing."""
-    
+
     @staticmethod
     def create_malicious_payloads() -> List[str]:
         """Create common malicious payloads for testing."""
@@ -320,7 +321,7 @@ class SecurityTestHelper:
             "${7*7}",
             "<%=7*7%>"
         ]
-    
+
     @staticmethod
     def assert_no_sql_injection(query: str):
         """Assert that query doesn't contain SQL injection patterns."""
@@ -328,16 +329,16 @@ class SecurityTestHelper:
             "drop table", "delete from", "insert into", "update set",
             "union select", "exec ", "sp_", "xp_", "--", "/*", "*/"
         ]
-        
+
         query_lower = query.lower()
         for pattern in dangerous_patterns:
             assert pattern not in query_lower, f"Potential SQL injection detected: {pattern}"
-    
+
     @staticmethod
     def assert_no_path_traversal(path: str):
         """Assert that path doesn't contain traversal patterns."""
         dangerous_patterns = ["../", "..\\", "/etc/", "\\windows\\", "~"]
-        
+
         for pattern in dangerous_patterns:
             assert pattern not in path.lower(), f"Potential path traversal detected: {pattern}"
 
@@ -347,7 +348,7 @@ def pytest_configure():
     """Configure pytest with custom assertions."""
     # Add custom assertion helpers to pytest namespace
     import pytest
-    
+
     pytest.helpers = type('Helpers', (), {
         'async_test': AsyncTestHelper,
         'agent_test': AgentTestHelper,

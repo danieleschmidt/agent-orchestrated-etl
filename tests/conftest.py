@@ -1,34 +1,34 @@
-import sys
-import pathlib
-import pytest
 import asyncio
-from typing import Generator, Dict, Any
-from unittest.mock import Mock, MagicMock, AsyncMock
-import tempfile
 import json
+import pathlib
 import shutil
+import sys
+import tempfile
+from datetime import datetime
 from pathlib import Path
-import os
-from datetime import datetime, timedelta
+from typing import Any, Dict, Generator
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'src'))
 
 try:
-    from agent_orchestrated_etl.config import Config
     from agent_orchestrated_etl.agents.base_agent import BaseAgent
-    from agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
     from agent_orchestrated_etl.agents.etl_agent import ETLAgent
     from agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
+    from agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
+    from agent_orchestrated_etl.config import Config
     LEGACY_MODULES_AVAILABLE = True
 except ImportError:
     LEGACY_MODULES_AVAILABLE = False
 
 # Import new service modules
 from src.agent_orchestrated_etl.database.connection import DatabaseManager
-from src.agent_orchestrated_etl.services.pipeline_service import PipelineService
+from src.agent_orchestrated_etl.services.integration_service import IntegrationService
 from src.agent_orchestrated_etl.services.intelligence_service import IntelligenceService
 from src.agent_orchestrated_etl.services.optimization_service import OptimizationService
-from src.agent_orchestrated_etl.services.integration_service import IntegrationService
+from src.agent_orchestrated_etl.services.pipeline_service import PipelineService
 
 # Test configuration
 TEST_CONFIG = {
@@ -113,7 +113,7 @@ def mock_base_agent() -> Mock:
     """Mock base agent for testing."""
     if not LEGACY_MODULES_AVAILABLE:
         pytest.skip("Legacy agent modules not available")
-    
+
     agent = Mock(spec=BaseAgent)
     agent.agent_id = "test-agent-001"
     agent.agent_type = "test"
@@ -266,7 +266,7 @@ def setup_test_environment(monkeypatch):
         "AWS_SECRET_ACCESS_KEY": "test-secret-key",
         "AWS_DEFAULT_REGION": "us-east-1",
     }
-    
+
     for key, value in test_env_vars.items():
         monkeypatch.setenv(key, value)
 
@@ -274,13 +274,13 @@ def _get_nested_config(config: Dict[str, Any], key: str, default: Any = None) ->
     """Helper function to get nested configuration values."""
     keys = key.split('.')
     value = config
-    
+
     for k in keys:
         if isinstance(value, dict) and k in value:
             value = value[k]
         else:
             return default
-    
+
     return value
 
 # Test markers
@@ -314,7 +314,7 @@ def pytest_configure(config):
 def mock_db_manager():
     """Mock database manager for testing."""
     mock_manager = AsyncMock(spec=DatabaseManager)
-    
+
     # Configure common mock behaviors
     mock_manager.initialize.return_value = None
     mock_manager.close.return_value = None
@@ -324,7 +324,7 @@ def mock_db_manager():
         "response_time_ms": 50,
         "timestamp": datetime.now().timestamp()
     }
-    
+
     return mock_manager
 
 
@@ -332,7 +332,7 @@ def mock_db_manager():
 def mock_intelligence_service():
     """Mock intelligence service for testing."""
     mock_service = AsyncMock(spec=IntelligenceService)
-    
+
     # Configure default responses
     mock_service.analyze_pipeline_requirements.return_value = {
         "recommended_transformations": ["data_validation", "data_cleaning"],
@@ -340,13 +340,13 @@ def mock_intelligence_service():
         "resource_requirements": {"memory_gb": 4, "cpu_cores": 2},
         "compliance_recommendations": []
     }
-    
+
     mock_service.optimize_execution_strategy.return_value = {
         "optimization_recommendations": ["increase_parallelism"],
         "predicted_improvements": {"execution_time_reduction_percent": 20},
         "confidence_score": 0.8
     }
-    
+
     mock_service.predict_pipeline_behavior.return_value = {
         "predicted_success_probability": 0.9,
         "estimated_execution_time_minutes": 25,
@@ -354,7 +354,7 @@ def mock_intelligence_service():
         "risk_factors": [],
         "optimization_opportunities": []
     }
-    
+
     return mock_service
 
 
@@ -362,7 +362,7 @@ def mock_intelligence_service():
 def mock_optimization_service():
     """Mock optimization service for testing."""
     mock_service = AsyncMock(spec=OptimizationService)
-    
+
     # Configure default responses
     mock_service.optimize_pipeline_configuration.return_value = {
         "optimized_config": {
@@ -376,13 +376,13 @@ def mock_optimization_service():
         },
         "confidence_score": 0.85
     }
-    
+
     mock_service.real_time_optimization.return_value = {
         "optimization_triggered": False,
         "status": "stable",
         "monitoring_recommendations": []
     }
-    
+
     return mock_service
 
 
@@ -390,7 +390,7 @@ def mock_optimization_service():
 def mock_integration_service():
     """Mock integration service for testing."""
     mock_service = AsyncMock(spec=IntegrationService)
-    
+
     # Configure default responses
     mock_service.execute_integration.return_value = {
         "success": True,
@@ -399,14 +399,14 @@ def mock_integration_service():
         "execution_time_ms": 150,
         "integration_id": "test-integration"
     }
-    
+
     mock_service.get_integration_health.return_value = {
         "integration_id": "test-integration",
         "success_rate": 0.95,
         "avg_response_time_ms": 150,
         "health_score": 0.9
     }
-    
+
     return mock_service
 
 
@@ -448,7 +448,7 @@ def sample_csv_file(temp_dir):
 4,David Wilson,david@example.com,31,Engineering
 5,Eve Brown,eve@example.com,26,Marketing
 """
-    
+
     file_path = temp_dir / "sample.csv"
     file_path.write_text(csv_content)
     return file_path
@@ -468,7 +468,7 @@ def sample_json_file(temp_dir):
             "generated_at": "2023-01-01T00:00:00Z"
         }
     }
-    
+
     file_path = temp_dir / "sample.json"
     file_path.write_text(json.dumps(json_data, indent=2))
     return file_path
@@ -518,7 +518,7 @@ def reset_service_singletons():
     """Reset service singleton instances between tests."""
     # Reset any global state or singletons here
     yield
-    
+
     # Cleanup after test
     # Reset global database manager if needed
     import src.agent_orchestrated_etl.database.connection as db_conn

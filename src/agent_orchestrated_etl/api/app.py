@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Dict
+from typing import AsyncGenerator
 
 try:
     from fastapi import FastAPI, Request, Response
@@ -22,17 +22,17 @@ except ImportError:
     GZipMiddleware = None
     FASTAPI_AVAILABLE = False
 
-from ..database import initialize_database, close_database
-from ..logging_config import get_logger
+from ..database import close_database, initialize_database
 from ..exceptions import AgentException, DatabaseException, ValidationError
+from ..logging_config import get_logger
 
 if FASTAPI_AVAILABLE:
     from .routers import (
-        health_router,
-        pipeline_router,
         agent_router,
         data_quality_router,
+        health_router,
         monitoring_router,
+        pipeline_router,
     )
 
 
@@ -43,19 +43,19 @@ logger = get_logger("agent_etl.api")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager."""
     logger.info("Starting Agent-Orchestrated-ETL API...")
-    
+
     try:
         # Initialize database connections
         await initialize_database()
         logger.info("Database initialized")
-        
+
         # Additional startup tasks could go here
         # - Initialize Redis connections
         # - Start background tasks
         # - Register with service discovery
-        
+
         yield
-        
+
     except Exception as e:
         logger.error(f"Failed to start application: {e}")
         raise
@@ -74,7 +74,7 @@ def create_app() -> FastAPI:
     """
     if not FASTAPI_AVAILABLE:
         raise ImportError("FastAPI is not available. Install with 'pip install fastapi'")
-    
+
     # Application metadata
     app = FastAPI(
         title="Agent-Orchestrated-ETL API",
@@ -85,25 +85,25 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
-    
+
     # Add middleware
     setup_middleware(app)
-    
+
     # Add exception handlers
     setup_exception_handlers(app)
-    
+
     # Add request/response middleware
     setup_request_middleware(app)
-    
+
     # Include routers
     setup_routers(app)
-    
+
     return app
 
 
 def setup_middleware(app: FastAPI) -> None:
     """Setup application middleware."""
-    
+
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -112,14 +112,14 @@ def setup_middleware(app: FastAPI) -> None:
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
         allow_headers=["*"],
     )
-    
+
     # Compression middleware
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 def setup_exception_handlers(app: FastAPI) -> None:
     """Setup custom exception handlers."""
-    
+
     @app.exception_handler(ValidationError)
     async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
         """Handle validation errors."""
@@ -132,7 +132,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
                 "type": "ValidationError",
             }
         )
-    
+
     @app.exception_handler(DatabaseException)
     async def database_error_handler(request: Request, exc: DatabaseException) -> JSONResponse:
         """Handle database errors."""
@@ -145,7 +145,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
                 "type": "DatabaseException",
             }
         )
-    
+
     @app.exception_handler(AgentException)
     async def agent_error_handler(request: Request, exc: AgentException) -> JSONResponse:
         """Handle agent errors."""
@@ -158,7 +158,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
                 "type": "AgentException",
             }
         )
-    
+
     @app.exception_handler(Exception)
     async def general_error_handler(request: Request, exc: Exception) -> JSONResponse:
         """Handle general errors."""
@@ -175,7 +175,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
 
 def setup_request_middleware(app: FastAPI) -> None:
     """Setup request/response middleware."""
-    
+
     @app.middleware("http")
     async def add_process_time_header(request: Request, call_next) -> Response:
         """Add processing time header to responses."""
@@ -184,12 +184,12 @@ def setup_request_middleware(app: FastAPI) -> None:
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         return response
-    
-    @app.middleware("http") 
+
+    @app.middleware("http")
     async def log_requests(request: Request, call_next) -> Response:
         """Log all requests."""
         start_time = time.time()
-        
+
         # Log request
         logger.info(
             f"Request: {request.method} {request.url.path}",
@@ -200,10 +200,10 @@ def setup_request_middleware(app: FastAPI) -> None:
                 "client_ip": request.client.host if request.client else None,
             }
         )
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Log response
         process_time = time.time() - start_time
         logger.info(
@@ -215,39 +215,39 @@ def setup_request_middleware(app: FastAPI) -> None:
                 "path": request.url.path,
             }
         )
-        
+
         return response
 
 
 def setup_routers(app: FastAPI) -> None:
     """Setup API routers."""
-    
+
     # Health and monitoring endpoints
     app.include_router(
         health_router,
         prefix="/health",
         tags=["health"]
     )
-    
+
     app.include_router(
         monitoring_router,
         prefix="/monitoring",
         tags=["monitoring"]
     )
-    
+
     # Core API endpoints
     app.include_router(
         pipeline_router,
         prefix="/api/v1/pipelines",
         tags=["pipelines"]
     )
-    
+
     app.include_router(
         agent_router,
         prefix="/api/v1/agents",
         tags=["agents"]
     )
-    
+
     app.include_router(
         data_quality_router,
         prefix="/api/v1/data-quality",
@@ -258,10 +258,10 @@ def setup_routers(app: FastAPI) -> None:
 def _get_cors_origins() -> list[str]:
     """Get CORS origins from environment."""
     cors_origins = os.getenv("CORS_ORIGINS", "")
-    
+
     if cors_origins:
         return [origin.strip() for origin in cors_origins.split(",")]
-    
+
     # Default CORS origins for development
     return [
         "http://localhost:3000",

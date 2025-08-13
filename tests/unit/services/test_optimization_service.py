@@ -1,9 +1,8 @@
 """Unit tests for OptimizationService."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from datetime import datetime, timedelta
-from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.agent_orchestrated_etl.services.optimization_service import OptimizationService
 
@@ -38,23 +37,23 @@ class TestOptimizationService:
             "target_reduction_percent": 30,
             "acceptable_resource_increase": 50
         }
-        
+
         result = await self.optimization_service.optimize_pipeline_configuration(
             pipeline_id, current_config, performance_data, optimization_goals
         )
-        
+
         assert "optimized_config" in result
         assert "expected_improvements" in result
         assert "confidence_score" in result
-        
+
         optimized = result["optimized_config"]
-        
+
         # Should increase parallelism due to low CPU utilization
         assert optimized["parallel_workers"] > current_config["parallel_workers"]
-        
+
         # Should potentially increase batch size for better throughput
         assert optimized["batch_size"] >= current_config["batch_size"]
-        
+
         # Should have improvement predictions
         improvements = result["expected_improvements"]
         assert "execution_time_reduction_percent" in improvements
@@ -80,19 +79,19 @@ class TestOptimizationService:
             "target_reduction_percent": 20,
             "maintain_performance": True
         }
-        
+
         result = await self.optimization_service.optimize_pipeline_configuration(
             pipeline_id, current_config, performance_data, optimization_goals
         )
-        
+
         optimized = result["optimized_config"]
-        
+
         # Should reduce batch size to lower memory usage
         assert optimized["batch_size"] < current_config["batch_size"]
-        
+
         # Should potentially reduce parallel workers
         assert optimized["parallel_workers"] <= current_config["parallel_workers"]
-        
+
         # Should have memory-specific optimizations
         assert "streaming_enabled" in optimized or "incremental_processing" in optimized
 
@@ -117,19 +116,19 @@ class TestOptimizationService:
             "target_reduction_percent": 40,
             "performance_tolerance": 20
         }
-        
+
         result = await self.optimization_service.optimize_pipeline_configuration(
             pipeline_id, current_config, performance_data, optimization_goals
         )
-        
+
         optimized = result["optimized_config"]
-        
+
         # Should recommend smaller instance due to low utilization
         assert optimized["instance_type"] in ["medium", "small"]
-        
+
         # Should optimize storage tier
         assert optimized["storage_tier"] in ["standard", "cold"]
-        
+
         # Should have cost projections
         improvements = result["expected_improvements"]
         assert "cost_reduction_percent" in improvements
@@ -147,20 +146,20 @@ class TestOptimizationService:
             "response_time_ms": 2500
         }
         adaptation_threshold = 0.3  # 30% performance degradation triggers optimization
-        
+
         result = await self.optimization_service.real_time_optimization(
             pipeline_id, live_metrics, adaptation_threshold
         )
-        
+
         assert result["optimization_triggered"] is True
         assert "immediate_actions" in result
         assert "configuration_changes" in result
-        
+
         actions = result["immediate_actions"]
-        
+
         # Should recommend immediate actions for performance issues
         assert any("scale" in action.lower() or "reduce" in action.lower() for action in actions)
-        
+
         config_changes = result["configuration_changes"]
         assert len(config_changes) > 0
 
@@ -176,11 +175,11 @@ class TestOptimizationService:
             "response_time_ms": 800
         }
         adaptation_threshold = 0.3
-        
+
         result = await self.optimization_service.real_time_optimization(
             pipeline_id, live_metrics, adaptation_threshold
         )
-        
+
         assert result["optimization_triggered"] is False
         assert result["status"] == "stable"
         assert "monitoring_recommendations" in result
@@ -208,11 +207,11 @@ class TestOptimizationService:
             "cost": 0.2,
             "reliability": 0.1
         }
-        
+
         score = await self.optimization_service._calculate_optimization_score(
             current_metrics, baseline_metrics, weights
         )
-        
+
         assert 0.0 <= score <= 1.0
         assert score > 0.5  # Should be positive since current metrics are better
 
@@ -231,17 +230,17 @@ class TestOptimizationService:
             "io_wait_percent": 15,
             "cache_hit_rate": 0.6
         }
-        
+
         result = await self.optimization_service._apply_performance_optimizations(
             current_config, performance_data
         )
-        
+
         # Should increase parallelism due to low CPU usage
         assert result["parallel_workers"] > current_config["parallel_workers"]
-        
+
         # Should increase batch size for better throughput
         assert result["batch_size"] >= current_config["batch_size"]
-        
+
         # Should optimize connection pool
         assert result["connection_pool_size"] >= current_config["connection_pool_size"]
 
@@ -260,17 +259,17 @@ class TestOptimizationService:
             "memory_pressure_events": 10,
             "swap_usage_mb": 1024
         }
-        
+
         result = await self.optimization_service._apply_memory_optimizations(
             current_config, memory_data
         )
-        
+
         # Should reduce batch size to lower memory pressure
         assert result["batch_size"] < current_config["batch_size"]
-        
+
         # Should adjust GC strategy
         assert result["gc_strategy"] != current_config["gc_strategy"]
-        
+
         # Should add streaming or incremental processing
         assert "streaming_enabled" in result or "incremental_processing" in result
 
@@ -289,17 +288,17 @@ class TestOptimizationService:
             "network_costs_percent": 15,
             "idle_time_percent": 60
         }
-        
+
         result = await self.optimization_service._apply_cost_optimizations(
             current_config, cost_data
         )
-        
+
         # Should downsize instance due to low utilization
         assert "large" in result["instance_type"] or "medium" in result["instance_type"]
-        
+
         # Should optimize storage type
         assert result["storage_type"] in ["standard", "hdd"]
-        
+
         # Should reduce backup frequency
         assert result["backup_frequency"] in ["daily", "weekly"]
 
@@ -313,11 +312,11 @@ class TestOptimizationService:
             {"config": {"batch_size": 2000, "parallel_workers": 4}, "execution_time": 20},
             {"config": {"batch_size": 500, "parallel_workers": 1}, "execution_time": 40}
         ]
-        
+
         result = await self.optimization_service._predict_optimization_impact(
             current_config, optimized_config, historical_data
         )
-        
+
         assert "predicted_execution_time_change" in result
         assert "confidence_score" in result
         assert "risk_assessment" in result
@@ -338,11 +337,11 @@ class TestOptimizationService:
             "performance_variance": 0.3,
             "resource_efficiency": 0.6
         }
-        
+
         strategy = await self.optimization_service._select_optimization_strategy(
             pipeline_characteristics, performance_history
         )
-        
+
         assert strategy["primary_focus"] in ["performance", "reliability", "cost", "resource_efficiency"]
         assert "tactics" in strategy
         assert "monitoring_points" in strategy
@@ -364,14 +363,14 @@ class TestOptimizationService:
             "memory_usage_gb": 4.5,
             "success_rate": 0.98
         }
-        
+
         await self.optimization_service.learn_from_optimization_result(
             optimization_result, actual_performance
         )
-        
+
         # Should have updated learning database
         self.mock_db_manager.execute_query.assert_called()
-        
+
         # Verify learning data structure
         call_args = self.mock_db_manager.execute_query.call_args
         query = call_args[0][0]
@@ -381,7 +380,7 @@ class TestOptimizationService:
     async def test_get_optimization_recommendations(self):
         """Test getting optimization recommendations."""
         pipeline_id = "rec-pipeline-001"
-        
+
         # Mock current performance data
         self.mock_db_manager.execute_query.return_value = [{
             "avg_execution_time": 35,
@@ -390,13 +389,13 @@ class TestOptimizationService:
             "success_rate": 0.92,
             "cost_per_execution": 3.50
         }]
-        
+
         result = await self.optimization_service.get_optimization_recommendations(pipeline_id)
-        
+
         assert "recommendations" in result
         assert "priority_order" in result
         assert "impact_estimates" in result
-        
+
         recommendations = result["recommendations"]
         assert len(recommendations) > 0
         assert all("type" in rec and "description" in rec for rec in recommendations)
@@ -410,7 +409,7 @@ class TestOptimizationService:
             {"batch_size": 2000, "parallel_workers": 4},
             {"batch_size": 500, "parallel_workers": 1}
         ]
-        
+
         # Mock benchmark results
         with patch.object(self.optimization_service, '_run_benchmark_test') as mock_benchmark:
             mock_benchmark.side_effect = [
@@ -418,15 +417,15 @@ class TestOptimizationService:
                 {"execution_time": 20, "memory_usage": 6.0, "success": True},
                 {"execution_time": 45, "memory_usage": 2.0, "success": True}
             ]
-            
+
             result = await self.optimization_service.benchmark_configurations(
                 pipeline_id, test_configs
             )
-            
+
             assert "best_configuration" in result
             assert "benchmark_results" in result
             assert len(result["benchmark_results"]) == 3
-            
+
             # Best config should be the one with shortest execution time
             best_config = result["best_configuration"]
             assert best_config["batch_size"] == 2000
@@ -439,14 +438,14 @@ class TestOptimizationService:
         current_config = {"batch_size": 1000}
         performance_data = {"avg_execution_time": 30}
         optimization_goals = {"primary": "reduce_execution_time"}
-        
+
         # Mock database error
         self.mock_db_manager.execute_query.side_effect = Exception("Database connection failed")
-        
+
         result = await self.optimization_service.optimize_pipeline_configuration(
             pipeline_id, current_config, performance_data, optimization_goals
         )
-        
+
         # Should gracefully handle errors and provide fallback recommendations
         assert "optimized_config" in result
         assert "error" in result
@@ -478,15 +477,15 @@ class TestOptimizationService:
                 "max_cost_increase_percent": 20
             }
         }
-        
+
         result = await self.optimization_service.optimize_pipeline_configuration(
             pipeline_id, current_config, performance_data, optimization_goals
         )
-        
+
         assert "optimized_config" in result
         assert "trade_off_analysis" in result
         assert "pareto_solutions" in result
-        
+
         # Should provide multiple solution options
         pareto_solutions = result["pareto_solutions"]
         assert len(pareto_solutions) > 1

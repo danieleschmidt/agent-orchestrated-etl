@@ -1,12 +1,13 @@
 """Test enhanced monitor agent functionality."""
 
 import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
+import pytest
+
 from src.agent_orchestrated_etl.agents.base_agent import AgentConfig, AgentRole
 from src.agent_orchestrated_etl.agents.communication import AgentCommunicationHub
+from src.agent_orchestrated_etl.agents.monitor_agent import MonitorAgent
 
 
 class TestMonitorAgentEnhancements:
@@ -20,16 +21,16 @@ class TestMonitorAgentEnhancements:
             role=AgentRole.MONITOR,
             max_concurrent_tasks=5,
         )
-        
+
         # Mock communication hub
         communication_hub = MagicMock(spec=AgentCommunicationHub)
-        
+
         agent = MonitorAgent(
             config=config,
             communication_hub=communication_hub,
             monitoring_scope="test"
         )
-        
+
         return agent
 
     @pytest.mark.asyncio
@@ -39,7 +40,7 @@ class TestMonitorAgentEnhancements:
         orchestrator_agents = [
             {"agent_id": "orchestrator_1", "role": "orchestrator"}
         ]
-        
+
         # Mock pipeline status response
         pipeline_status = {
             "pipelines": [
@@ -54,7 +55,7 @@ class TestMonitorAgentEnhancements:
                     ]
                 },
                 {
-                    "pipeline_id": "test_pipeline_2", 
+                    "pipeline_id": "test_pipeline_2",
                     "status": "failed",
                     "started_at": time.time() - 600,  # 10 minutes ago
                     "tasks": [
@@ -64,22 +65,22 @@ class TestMonitorAgentEnhancements:
                 }
             ]
         }
-        
+
         # Mock communication hub methods
         monitor_agent.communication_hub.get_agents_by_role = AsyncMock(return_value=orchestrator_agents)
         monitor_agent.communication_hub.send_message = AsyncMock(return_value=pipeline_status)
-        
+
         # Mock alert triggering
         monitor_agent._trigger_alert = AsyncMock()
-        
+
         # Run pipeline status check
         await monitor_agent._check_pipeline_status()
-        
+
         # Verify pipeline metrics were stored
         assert "pipelines" in monitor_agent.performance_metrics
         pipeline_metrics = monitor_agent.performance_metrics["pipelines"]
         assert len(pipeline_metrics) == 2
-        
+
         # Check first pipeline (running)
         running_pipeline = next(p for p in pipeline_metrics if p["pipeline_id"] == "test_pipeline_1")
         assert running_pipeline["status"] == "running"
@@ -87,14 +88,14 @@ class TestMonitorAgentEnhancements:
         assert running_pipeline["completed_tasks"] == 1
         assert running_pipeline["running_tasks"] == 1
         assert running_pipeline["failed_tasks"] == 0
-        
+
         # Check second pipeline (failed)
         failed_pipeline = next(p for p in pipeline_metrics if p["pipeline_id"] == "test_pipeline_2")
         assert failed_pipeline["status"] == "failed"
         assert failed_pipeline["total_tasks"] == 2
         assert failed_pipeline["completed_tasks"] == 1
         assert failed_pipeline["failed_tasks"] == 1
-        
+
         # Verify alert was triggered for failed pipeline
         monitor_agent._trigger_alert.assert_called()
         alert_calls = monitor_agent._trigger_alert.call_args_list
@@ -111,7 +112,7 @@ class TestMonitorAgentEnhancements:
             {"agent_id": "orchestrator_1", "role": "orchestrator"},
             {"agent_id": monitor_agent.config.agent_id, "role": "monitor"}  # Should be skipped
         ]
-        
+
         # Mock health check responses
         health_responses = {
             "etl_agent_1": {
@@ -122,41 +123,41 @@ class TestMonitorAgentEnhancements:
             },
             "orchestrator_1": None  # Unresponsive agent
         }
-        
+
         async def mock_send_message(agent_id, message, timeout=None):
             return health_responses.get(agent_id)
-        
+
         # Mock communication hub methods
         monitor_agent.communication_hub.get_all_agents = AsyncMock(return_value=all_agents)
         monitor_agent.communication_hub.send_message = AsyncMock(side_effect=mock_send_message)
-        
+
         # Mock alert triggering
         monitor_agent._trigger_alert = AsyncMock()
-        
+
         # Run agent health check
         await monitor_agent._check_agent_health()
-        
+
         # Verify agent health metrics were stored
         assert "agent_health" in monitor_agent.performance_metrics
         agent_health_metrics = monitor_agent.performance_metrics["agent_health"]
         assert len(agent_health_metrics) == 2  # Should exclude self
-        
+
         # Check healthy agent
         healthy_agent = next(m for m in agent_health_metrics if m["agent_id"] == "etl_agent_1")
         assert healthy_agent["status"] == "healthy"
         assert healthy_agent["agent_role"] == "etl"
         assert healthy_agent["response_time"] > 0
-        
+
         # Check unresponsive agent
         unresponsive_agent = next(m for m in agent_health_metrics if m["agent_id"] == "orchestrator_1")
         assert unresponsive_agent["status"] == "unresponsive"
         assert unresponsive_agent["agent_role"] == "orchestrator"
         assert unresponsive_agent["error_message"] == "No response to health check"
-        
+
         # Verify health status was stored
         assert monitor_agent.health_status["etl_agent_1"] == "healthy"
         assert monitor_agent.health_status["orchestrator_1"] == "unresponsive"
-        
+
         # Verify alert was triggered for unresponsive agent
         monitor_agent._trigger_alert.assert_called()
         alert_calls = monitor_agent._trigger_alert.call_args_list
@@ -171,29 +172,29 @@ class TestMonitorAgentEnhancements:
         # Simulate health checks for system health calculation
         health_checks = [
             {"agent_id": "agent1", "status": "healthy", "response_time": 100},
-            {"agent_id": "agent2", "status": "healthy", "response_time": 150}, 
+            {"agent_id": "agent2", "status": "healthy", "response_time": 150},
             {"agent_id": "agent3", "status": "degraded", "response_time": 300},
             {"agent_id": "agent4", "status": "unresponsive", "response_time": 5000},
             {"agent_id": "agent5", "status": "healthy", "response_time": 120}
         ]
-        
+
         # Mock alert triggering
         monitor_agent._trigger_alert = AsyncMock()
-        
+
         # Run system health update
         await monitor_agent._update_system_health_metrics(health_checks)
-        
+
         # Verify system health metrics were calculated correctly
         assert "system_health" in monitor_agent.performance_metrics
         system_health = monitor_agent.performance_metrics["system_health"][-1]
-        
+
         assert system_health["total_agents"] == 5
         assert system_health["healthy_agents"] == 3
         assert system_health["degraded_agents"] == 1
         assert system_health["unhealthy_agents"] == 1
         assert system_health["health_percentage"] == 60.0  # 3/5 * 100
         assert system_health["system_status"] == "unhealthy"  # <70% healthy
-        
+
         # Verify alert was triggered for poor system health
         monitor_agent._trigger_alert.assert_called()
         alert_calls = monitor_agent._trigger_alert.call_args_list
@@ -217,16 +218,16 @@ class TestMonitorAgentEnhancements:
             "failed_tasks": 0,
             "running_tasks": 2
         }
-        
+
         # Add to performance metrics
         monitor_agent.performance_metrics["pipelines"] = [long_running_pipeline]
-        
+
         # Mock alert triggering
         monitor_agent._trigger_alert = AsyncMock()
-        
+
         # Run timeout check
         await monitor_agent._check_pipeline_timeouts()
-        
+
         # Verify timeout alert was triggered
         monitor_agent._trigger_alert.assert_called_once()
         alert_call = monitor_agent._trigger_alert.call_args
@@ -248,13 +249,13 @@ class TestMonitorAgentEnhancements:
             "failed_tasks": 5,  # 50% failure rate
             "running_tasks": 1
         }
-        
+
         # Mock alert triggering
         monitor_agent._trigger_alert = AsyncMock()
-        
+
         # Run pipeline alert check
         await monitor_agent._check_pipeline_alerts(high_failure_pipeline)
-        
+
         # Verify high failure rate alert was triggered
         monitor_agent._trigger_alert.assert_called()
         alert_calls = monitor_agent._trigger_alert.call_args_list
@@ -273,13 +274,13 @@ class TestMonitorAgentEnhancements:
             "status": "healthy",
             "response_time": 12000  # 12 seconds (> 10s critical threshold)
         }
-        
+
         # Mock alert triggering
         monitor_agent._trigger_alert = AsyncMock()
-        
+
         # Run agent health alert check
         await monitor_agent._check_agent_health_alerts(slow_agent_metric)
-        
+
         # Verify slow response alert was triggered
         monitor_agent._trigger_alert.assert_called()
         alert_call = monitor_agent._trigger_alert.call_args
@@ -292,7 +293,7 @@ class TestMonitorAgentEnhancements:
     async def test_metrics_cleanup(self, monitor_agent):
         """Test that old metrics are properly cleaned up."""
         current_time = time.time()
-        
+
         # Add old and new metrics
         old_pipeline_metric = {
             "timestamp": current_time - (25 * 60 * 60),  # 25 hours ago
@@ -302,15 +303,15 @@ class TestMonitorAgentEnhancements:
             "timestamp": current_time - (1 * 60 * 60),   # 1 hour ago
             "pipeline_id": "new_pipeline"
         }
-        
+
         monitor_agent.performance_metrics["pipelines"] = [old_pipeline_metric, new_pipeline_metric]
-        
+
         # Mock communication hub to avoid actual calls
         monitor_agent.communication_hub.get_agents_by_role = AsyncMock(return_value=[])
-        
+
         # Run pipeline status check (which includes cleanup)
         await monitor_agent._check_pipeline_status()
-        
+
         # Verify old metrics were cleaned up
         remaining_metrics = monitor_agent.performance_metrics["pipelines"]
         assert len(remaining_metrics) == 1
@@ -325,7 +326,7 @@ class TestMonitorAgentEnhancements:
         assert monitor_agent.alert_thresholds["error_rate"]["critical"] == 10.0
         assert monitor_agent.alert_thresholds["response_time"]["warning"] == 5000.0
         assert monitor_agent.alert_thresholds["response_time"]["critical"] == 10000.0
-        
+
         # Check monitoring intervals
         assert monitor_agent.monitoring_intervals["pipeline_status"] == 60.0
         assert monitor_agent.monitoring_intervals["agent_health"] == 60.0
@@ -337,7 +338,7 @@ class TestMonitorAgentEnhancements:
         """Test that critical events are stored in agent memory."""
         # Mock memory storage
         monitor_agent.memory.store_entry = AsyncMock()
-        
+
         # Process a failed pipeline
         failed_pipeline = {
             "pipeline_id": "failed_pipeline",
@@ -345,9 +346,9 @@ class TestMonitorAgentEnhancements:
             "started_at": time.time() - 300,
             "tasks": [{"task_id": "extract", "status": "failed"}]
         }
-        
+
         await monitor_agent._process_pipeline_status([failed_pipeline])
-        
+
         # Verify memory entry was stored
         monitor_agent.memory.store_entry.assert_called()
         memory_call = monitor_agent.memory.store_entry.call_args

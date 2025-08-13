@@ -1,6 +1,6 @@
-from agent_orchestrated_etl import cli, orchestrator
-
 import pytest
+
+from agent_orchestrated_etl import cli, orchestrator
 
 
 def test_run_pipeline_cmd(capsys):

@@ -1,16 +1,14 @@
 """Tests for ETL-017: Secret Management Security Fixes."""
 
 import os
+from unittest.mock import patch
+
 import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, Mock
 
 from src.agent_orchestrated_etl.config import SecretManager, SecurityConfig
 from src.agent_orchestrated_etl.config_templates import (
-    generate_env_template,
     generate_docker_compose_template,
-    generate_config_template
+    generate_env_template,
 )
 
 
@@ -21,13 +19,13 @@ class TestSecretManagementSecurity:
         """Test that generated .env templates don't contain hardcoded secrets."""
         for env in ["development", "staging", "production"]:
             template = generate_env_template(env)
-            
+
             # Check for commented out or placeholder secrets
             assert "# AGENT_ETL_DB_PASSWORD=" in template
             assert "# AGENT_ETL_S3_ACCESS_KEY_ID=" in template
             assert "# AGENT_ETL_S3_SECRET_ACCESS_KEY=" in template
             assert "# AGENT_ETL_API_KEY=" in template
-            
+
             # Ensure no actual secrets are present
             lines = template.split('\n')
             for line in lines:
@@ -38,14 +36,14 @@ class TestSecretManagementSecurity:
                         # These should not contain secret-like values
                         if any(secret_key in key.upper() for secret_key in ['PASSWORD', 'KEY', 'SECRET', 'TOKEN']):
                             # Skip the ones we intentionally commented out
-                            if key.strip() not in ['AGENT_ETL_DB_PASSWORD', 'AGENT_ETL_S3_ACCESS_KEY_ID', 
+                            if key.strip() not in ['AGENT_ETL_DB_PASSWORD', 'AGENT_ETL_S3_ACCESS_KEY_ID',
                                                  'AGENT_ETL_S3_SECRET_ACCESS_KEY', 'AGENT_ETL_API_KEY']:
                                 assert not value or value.isspace(), f"Found potential secret in {key}={value}"
 
     def test_docker_compose_uses_env_variables(self):
         """Test that Docker Compose template uses environment variables for secrets."""
         template = generate_docker_compose_template("production")
-        
+
         # Check that sensitive values use environment variable substitution
         assert "POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}" in template
         assert "# Set POSTGRES_PASSWORD environment variable" in template
@@ -53,7 +51,7 @@ class TestSecretManagementSecurity:
     def test_config_template_security_warnings(self):
         """Test that config templates include appropriate security warnings."""
         prod_template = generate_env_template("production")
-        
+
         # Check for security warnings in production
         assert "SECURITY WARNING: PRODUCTION ENVIRONMENT" in prod_template
         assert "Never store secrets in configuration files!" in prod_template
@@ -64,11 +62,11 @@ class TestSecretManagementSecurity:
         """Test that SecretManager doesn't log or expose secrets."""
         config = SecurityConfig(secret_provider="env")
         secret_manager = SecretManager(provider="env", security_config=config)
-        
+
         with patch.dict(os.environ, {"AGENT_ETL_TEST_SECRET": "sensitive_value"}):
             secret = secret_manager.get_secret("TEST_SECRET")
             assert secret == "sensitive_value"
-            
+
             # Test that the secret manager itself doesn't expose secrets in str representation
             manager_str = str(secret_manager.__dict__)
             assert "sensitive_value" not in manager_str
@@ -76,7 +74,7 @@ class TestSecretManagementSecurity:
     def test_secret_validation_prevents_injection(self):
         """Test that secret validation prevents injection attacks."""
         from src.agent_orchestrated_etl.validation import validate_environment_variable
-        
+
         # Test SQL injection patterns
         malicious_values = [
             "'; DROP TABLE users; --",
@@ -86,7 +84,7 @@ class TestSecretManagementSecurity:
             "$(rm -rf /)",
             "`rm -rf /`",
         ]
-        
+
         for malicious_value in malicious_values:
             try:
                 # This should either clean the value or raise an error
@@ -105,21 +103,21 @@ class TestSecretManagementSecurity:
             aws_secrets_prefix="test/"
         )
         secret_manager = SecretManager(provider="aws_secrets", security_config=config)
-        
+
         # Test that cache doesn't expose secrets
         cache_stats = secret_manager.get_cache_stats()
         assert "secret" not in str(cache_stats).lower()
         assert "password" not in str(cache_stats).lower()
-        
+
     def test_vault_integration_security(self):
-        """Test HashiCorp Vault integration security features.""" 
+        """Test HashiCorp Vault integration security features."""
         config = SecurityConfig(
             secret_provider="vault",
             vault_url="http://localhost:8200",
             vault_auth_method="token"
         )
         secret_manager = SecretManager(provider="vault", security_config=config)
-        
+
         # Test cache security
         cache_stats = secret_manager.get_cache_stats()
         assert isinstance(cache_stats, dict)
@@ -134,16 +132,16 @@ class TestSecretManagementSecurity:
         """Test that secret caching doesn't expose sensitive data."""
         config = SecurityConfig(secret_provider="env")
         secret_manager = SecretManager(provider="env", security_config=config)
-        
+
         with patch.dict(os.environ, {"AGENT_ETL_CACHE_TEST": "secret_value"}):
             # Get secret to populate cache
             secret_manager.get_secret("CACHE_TEST")
-            
+
             # Check cache stats don't expose secrets
             stats = secret_manager.get_cache_stats()
             stats_str = str(stats)
             assert "secret_value" not in stats_str
-            
+
             # Clear cache should work without issues
             secret_manager.clear_cache()
             stats_after = secret_manager.get_cache_stats()
@@ -158,7 +156,7 @@ class TestSecretManagementSecurity:
             'secret_key = "AKIA1234567890123456"',
             'token = "eyJhbGciOiJIUzI1NiJ9"',
         ]
-        
+
         for config_line in test_configs:
             # This test ensures our secret detection would catch these patterns
             # In practice, this would be part of a pre-commit hook or CI check
@@ -168,11 +166,11 @@ class TestSecretManagementSecurity:
         """Test that environment variable handling follows security best practices."""
         config = SecurityConfig(secret_provider="env")
         secret_manager = SecretManager(provider="env", security_config=config)
-        
+
         # Test with empty/None values
         assert secret_manager.get_secret("NONEXISTENT_SECRET") is None
         assert secret_manager.get_secret("NONEXISTENT_SECRET", "default") == "default"
-        
+
         # Test with whitespace (should be cleaned)
         with patch.dict(os.environ, {"AGENT_ETL_WHITESPACE_TEST": "  secret_with_spaces  "}):
             result = secret_manager.get_secret("WHITESPACE_TEST")
@@ -186,15 +184,15 @@ class TestSecretManagementSecurity:
             aws_secrets_cache_ttl=1  # 1 second for testing
         )
         secret_manager = SecretManager(provider="env", security_config=config)
-        
+
         # Test cache expiration
         with patch.dict(os.environ, {"AGENT_ETL_ROTATION_TEST": "old_value"}):
             old_secret = secret_manager.get_secret("ROTATION_TEST")
             assert old_secret == "old_value"
-            
+
             # Clear cache manually (simulating rotation)
             secret_manager.clear_cache()
-            
+
             # Update environment (simulating rotation)
             with patch.dict(os.environ, {"AGENT_ETL_ROTATION_TEST": "new_value"}):
                 new_secret = secret_manager.get_secret("ROTATION_TEST")
@@ -202,16 +200,16 @@ class TestSecretManagementSecurity:
 
     def test_configuration_validation_security(self):
         """Test that configuration validation includes security checks."""
-        from src.agent_orchestrated_etl.config import _validate_config, AppConfig
-        
+        from src.agent_orchestrated_etl.config import AppConfig, _validate_config
+
         # Test that production configs are validated for security
         config = AppConfig()
         config.environment = "production"
         config.debug = True  # This should be invalid for production
-        
+
         with pytest.raises(Exception):  # Should raise ValidationError
             _validate_config(config)
-        
+
         # Test valid production config
         config.debug = False
         config.logging.level = "INFO"  # Not DEBUG

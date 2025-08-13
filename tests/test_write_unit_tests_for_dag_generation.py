@@ -1,5 +1,6 @@
 import pytest
-from agent_orchestrated_etl import data_source_analysis, dag_generator
+
+from agent_orchestrated_etl import dag_generator, data_source_analysis
 
 
 def test_dag_structure_for_s3():

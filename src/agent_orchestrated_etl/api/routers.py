@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 try:
-    from fastapi import APIRouter, HTTPException, Query, Path, Body, Depends
+    from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel
     FASTAPI_AVAILABLE = True
@@ -21,10 +21,16 @@ except ImportError:
     BaseModel = None
     FASTAPI_AVAILABLE = False
 
-from ..database import get_database_manager, PipelineRepository, AgentRepository, QualityMetricsRepository
-from ..models import PipelineConfig, PipelineExecution, AgentConfiguration, DataQualityMetrics
+from ..database import (
+    AgentRepository,
+    PipelineRepository,
+    QualityMetricsRepository,
+    get_database_manager,
+)
 from ..logging_config import get_logger
-from ..exceptions import DatabaseException, ValidationError
+from ..models import (
+    PipelineConfig,
+)
 
 logger = get_logger("agent_etl.api.routers")
 
@@ -36,7 +42,7 @@ if FASTAPI_AVAILABLE:
         status: str
         timestamp: float
         details: Dict[str, Any] = {}
-    
+
     class PipelineCreateRequest(BaseModel):
         """Pipeline creation request model."""
         pipeline_id: str
@@ -46,7 +52,7 @@ if FASTAPI_AVAILABLE:
         transformations: List[Dict[str, Any]] = []
         destination: Dict[str, Any]
         schedule: Optional[Dict[str, Any]] = None
-    
+
     class PipelineResponse(BaseModel):
         """Pipeline response model."""
         pipeline_id: str
@@ -54,14 +60,14 @@ if FASTAPI_AVAILABLE:
         status: str
         created_at: float
         updated_at: Optional[float] = None
-    
+
     class AgentStatusResponse(BaseModel):
         """Agent status response model."""
         agent_id: str
         status: str
         last_heartbeat: float
         metrics: Dict[str, Any] = {}
-    
+
     class QualityMetricsResponse(BaseModel):
         """Quality metrics response model."""
         data_source_id: str
@@ -80,7 +86,7 @@ if FASTAPI_AVAILABLE:
         try:
             db_manager = get_database_manager()
             db_health = await db_manager.get_health_status()
-            
+
             return HealthResponse(
                 status="healthy" if db_health["status"] == "healthy" else "degraded",
                 timestamp=time.time(),
@@ -97,7 +103,7 @@ if FASTAPI_AVAILABLE:
                 timestamp=time.time(),
                 details={"error": str(e)}
             )
-    
+
     @health_router.get("/ready")
     async def readiness_check():
         """Readiness check endpoint."""
@@ -105,7 +111,7 @@ if FASTAPI_AVAILABLE:
             # Check database connectivity
             db_manager = get_database_manager()
             await db_manager.execute_query("SELECT 1", fetch_mode="one")
-            
+
             return JSONResponse(
                 content={"status": "ready", "timestamp": time.time()},
                 status_code=200
@@ -125,7 +131,7 @@ if FASTAPI_AVAILABLE:
     async def get_pipeline_repository() -> PipelineRepository:
         """Dependency to get pipeline repository."""
         return PipelineRepository()
-    
+
     @pipeline_router.post("/", response_model=PipelineResponse)
     async def create_pipeline(
         request: PipelineCreateRequest,
@@ -142,21 +148,21 @@ if FASTAPI_AVAILABLE:
                 tasks=[],  # Tasks would be generated based on transformations
                 transformation_rules=request.transformations,
             )
-            
+
             # Create pipeline execution record
             execution_id = await repo.create_pipeline_execution(pipeline_config)
-            
+
             return PipelineResponse(
                 pipeline_id=request.pipeline_id,
                 name=request.name,
                 status="created",
                 created_at=time.time()
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to create pipeline: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @pipeline_router.get("/{pipeline_id}", response_model=PipelineResponse)
     async def get_pipeline(
         pipeline_id: str = Path(..., description="Pipeline ID"),
@@ -169,25 +175,25 @@ if FASTAPI_AVAILABLE:
                 pipeline_id=pipeline_id,
                 limit=1
             )
-            
+
             if not executions:
                 raise HTTPException(status_code=404, detail="Pipeline not found")
-            
+
             execution = executions[0]
-            
+
             return PipelineResponse(
                 pipeline_id=execution.pipeline_id,
                 name=f"Pipeline {execution.pipeline_id}",
                 status=execution.status.value,
                 created_at=time.time()  # Would get from execution record
             )
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Failed to get pipeline {pipeline_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @pipeline_router.get("/", response_model=List[PipelineResponse])
     async def list_pipelines(
         status: Optional[str] = Query(None, description="Filter by status"),
@@ -201,7 +207,7 @@ if FASTAPI_AVAILABLE:
                 status=status,
                 limit=limit
             )
-            
+
             responses = []
             for execution in executions:
                 responses.append(PipelineResponse(
@@ -210,13 +216,13 @@ if FASTAPI_AVAILABLE:
                     status=execution.status.value,
                     created_at=time.time()  # Would get from execution record
                 ))
-            
+
             return responses
-            
+
         except Exception as e:
             logger.error(f"Failed to list pipelines: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @pipeline_router.post("/{pipeline_id}/execute")
     async def execute_pipeline(
         pipeline_id: str = Path(..., description="Pipeline ID"),
@@ -227,7 +233,7 @@ if FASTAPI_AVAILABLE:
         try:
             # This would integrate with the actual orchestrator
             # For now, just return a success response
-            
+
             return JSONResponse(
                 content={
                     "pipeline_id": pipeline_id,
@@ -238,7 +244,7 @@ if FASTAPI_AVAILABLE:
                 },
                 status_code=202
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to execute pipeline {pipeline_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -251,7 +257,7 @@ if FASTAPI_AVAILABLE:
     async def get_agent_repository() -> AgentRepository:
         """Dependency to get agent repository."""
         return AgentRepository()
-    
+
     @agent_router.get("/", response_model=List[AgentStatusResponse])
     async def list_agents(
         active_only: bool = Query(True, description="Show only active agents"),
@@ -263,7 +269,7 @@ if FASTAPI_AVAILABLE:
                 agents = await repo.list_active_agents()
             else:
                 agents = await repo.list_all()
-            
+
             responses = []
             for agent in agents:
                 responses.append(AgentStatusResponse(
@@ -272,13 +278,13 @@ if FASTAPI_AVAILABLE:
                     last_heartbeat=agent.get("last_heartbeat", 0),
                     metrics=agent.get("metrics", {})
                 ))
-            
+
             return responses
-            
+
         except Exception as e:
             logger.error(f"Failed to list agents: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @agent_router.get("/{agent_id}", response_model=AgentStatusResponse)
     async def get_agent_status(
         agent_id: str = Path(..., description="Agent ID"),
@@ -287,23 +293,23 @@ if FASTAPI_AVAILABLE:
         """Get agent status by ID."""
         try:
             agent = await repo.get_agent_status(agent_id)
-            
+
             if not agent:
                 raise HTTPException(status_code=404, detail="Agent not found")
-            
+
             return AgentStatusResponse(
                 agent_id=agent.get("id", agent_id),
                 status=agent.get("status", "unknown"),
                 last_heartbeat=agent.get("last_heartbeat", 0),
                 metrics=agent.get("metrics", {})
             )
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Failed to get agent {agent_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @agent_router.post("/{agent_id}/heartbeat")
     async def agent_heartbeat(
         agent_id: str = Path(..., description="Agent ID"),
@@ -317,7 +323,7 @@ if FASTAPI_AVAILABLE:
                 status="active",
                 metrics=metrics
             )
-            
+
             return JSONResponse(
                 content={
                     "agent_id": agent_id,
@@ -325,7 +331,7 @@ if FASTAPI_AVAILABLE:
                     "timestamp": time.time()
                 }
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to process heartbeat for {agent_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -338,7 +344,7 @@ if FASTAPI_AVAILABLE:
     async def get_quality_repository() -> QualityMetricsRepository:
         """Dependency to get quality metrics repository."""
         return QualityMetricsRepository()
-    
+
     @data_quality_router.get("/{data_source_id}/latest", response_model=QualityMetricsResponse)
     async def get_latest_quality_metrics(
         data_source_id: str = Path(..., description="Data source ID"),
@@ -347,26 +353,26 @@ if FASTAPI_AVAILABLE:
         """Get latest quality metrics for a data source."""
         try:
             metrics = await repo.get_latest_quality_metrics(data_source_id)
-            
+
             if not metrics:
                 raise HTTPException(
                     status_code=404,
                     detail="No quality metrics found for data source"
                 )
-            
+
             return QualityMetricsResponse(
                 data_source_id=metrics.data_source_id,
                 overall_score=metrics.overall_quality_score,
                 measurement_timestamp=metrics.measurement_timestamp,
                 dimension_scores=dict(metrics.dimension_scores)
             )
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Failed to get quality metrics for {data_source_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @data_quality_router.get("/{data_source_id}/trends")
     async def get_quality_trends(
         data_source_id: str = Path(..., description="Data source ID"),
@@ -376,7 +382,7 @@ if FASTAPI_AVAILABLE:
         """Get quality metrics trends over time."""
         try:
             trends = await repo.get_quality_trends(data_source_id, days)
-            
+
             return JSONResponse(
                 content={
                     "data_source_id": data_source_id,
@@ -385,7 +391,7 @@ if FASTAPI_AVAILABLE:
                     "total_measurements": len(trends)
                 }
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get quality trends for {data_source_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -425,11 +431,11 @@ if FASTAPI_AVAILABLE:
                     }
                 }
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get metrics: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    
+
     @monitoring_router.get("/prometheus")
     async def get_prometheus_metrics():
         """Get metrics in Prometheus format."""
@@ -452,13 +458,13 @@ agent_etl_agents_total{status="error"} 0
 # TYPE agent_etl_uptime_seconds counter
 agent_etl_uptime_seconds 0
 """.strip()
-            
+
             from fastapi.responses import PlainTextResponse
             return PlainTextResponse(
                 content=metrics_text,
                 media_type="text/plain; version=0.0.4; charset=utf-8"
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get Prometheus metrics: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -467,7 +473,7 @@ agent_etl_uptime_seconds 0
 # Handle case where FastAPI is not available
 if not FASTAPI_AVAILABLE:
     logger.warning("FastAPI not available, API routers will not be functional")
-    
+
     # Create placeholder objects
     health_router = None
     pipeline_router = None

@@ -1,12 +1,17 @@
 """Test sophisticated recovery strategies in orchestrator agent."""
 
 import time
-import pytest
 from unittest.mock import AsyncMock
 
-from src.agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
+import pytest
+
 from src.agent_orchestrated_etl.agents.base_agent import AgentConfig, AgentRole
-from src.agent_orchestrated_etl.exceptions import NetworkException, ExternalServiceException, RateLimitException
+from src.agent_orchestrated_etl.agents.orchestrator_agent import OrchestratorAgent
+from src.agent_orchestrated_etl.exceptions import (
+    ExternalServiceException,
+    NetworkException,
+    RateLimitException,
+)
 
 
 class TestOrchestratorRecoveryStrategies:
@@ -20,7 +25,7 @@ class TestOrchestratorRecoveryStrategies:
             role=AgentRole.ORCHESTRATOR,
             max_concurrent_tasks=5,
         )
-        
+
         agent = OrchestratorAgent(config=config)
         return agent
 
@@ -63,24 +68,24 @@ class TestOrchestratorRecoveryStrategies:
     async def test_network_error_retry_strategy(self, orchestrator_agent, sample_step, sample_workflow):
         """Test retry strategy for network errors."""
         error = NetworkException("Connection timeout")
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(sample_step, error, sample_workflow)
-        
+
         # Verify retry strategy is selected
         assert recovery_strategy["strategy"] == "retry_with_exponential_backoff"
         assert recovery_strategy["retry_attempt"] == 2
         assert recovery_strategy["delay_seconds"] > 0
         assert "Network connectivity issue" in recovery_strategy["reason"]
-        
+
         # Verify failure is recorded in workflow
         assert len(sample_workflow["failure_history"]) == 1
         failure_record = sample_workflow["failure_history"][0]
         assert failure_record["step_name"] == "transform_data"
         assert failure_record["error_type"] == "NetworkException"
-        
+
         # Verify memory storage was called
         orchestrator_agent.memory.store_entry.assert_called_once()
 
@@ -88,9 +93,9 @@ class TestOrchestratorRecoveryStrategies:
     async def test_rate_limit_error_analysis(self, orchestrator_agent, sample_step, sample_workflow):
         """Test rate limit error analysis and recovery."""
         error = RateLimitException("API rate limit exceeded")
-        
+
         error_analysis = orchestrator_agent._analyze_error(error, sample_step, sample_workflow)
-        
+
         # Verify rate limit analysis
         assert error_analysis["is_retryable"] is True
         assert error_analysis["retry_reason"] == "Rate limiting, will backoff"
@@ -103,9 +108,9 @@ class TestOrchestratorRecoveryStrategies:
     async def test_authentication_error_no_retry(self, orchestrator_agent, sample_step, sample_workflow):
         """Test that authentication errors are not retried."""
         error = Exception("Authentication failed: unauthorized access")
-        
+
         error_analysis = orchestrator_agent._analyze_error(error, sample_step, sample_workflow)
-        
+
         # Verify authentication errors are not retryable
         assert error_analysis["is_retryable"] is False
         assert error_analysis["retry_reason"] == "Authentication/authorization failure"
@@ -124,14 +129,14 @@ class TestOrchestratorRecoveryStrategies:
                 "retry_on_failure": False  # Force fallback instead of retry
             }
         }
-        
+
         error = ExternalServiceException("Data source unavailable")
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(extract_step, error, sample_workflow)
-        
+
         # Verify fallback strategy is selected
         assert recovery_strategy["strategy"] == "fallback_approach"
         assert "alternative data source" in recovery_strategy["fallback_config"]["description"]
@@ -150,14 +155,14 @@ class TestOrchestratorRecoveryStrategies:
                 "retry_on_failure": False
             }
         }
-        
+
         error = Exception("Validation rule failed")
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(validate_step, error, sample_workflow)
-        
+
         # Verify skip strategy is selected
         assert recovery_strategy["strategy"] == "skip_with_warning"
         assert "Skipping non-critical step" in recovery_strategy["message"]
@@ -169,14 +174,14 @@ class TestOrchestratorRecoveryStrategies:
         # Modify step to enable degradation
         sample_step["recovery_config"]["fallback_enabled"] = False
         sample_step["recovery_config"]["retry_on_failure"] = False
-        
+
         error = RateLimitException("Rate limit exceeded")  # Supports degradation
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(sample_step, error, sample_workflow)
-        
+
         # Verify degradation strategy is selected
         assert recovery_strategy["strategy"] == "graceful_degradation"
         assert "Degrading functionality" in recovery_strategy["message"]
@@ -187,7 +192,7 @@ class TestOrchestratorRecoveryStrategies:
         """Test dead letter queue strategy."""
         load_step = {
             "name": "load_data",
-            "type": "load", 
+            "type": "load",
             "attempt_number": 4,  # Exceeded retries
             "max_retries": 3,
             "recovery_config": {
@@ -196,14 +201,14 @@ class TestOrchestratorRecoveryStrategies:
                 "continue_on_failure": False
             }
         }
-        
+
         error = NetworkException("Database connection failed")  # Can be deferred
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(load_step, error, sample_workflow)
-        
+
         # Verify dead letter queue strategy is selected
         assert recovery_strategy["strategy"] == "dead_letter_queue"
         assert "dead letter queue" in recovery_strategy["message"]
@@ -223,14 +228,14 @@ class TestOrchestratorRecoveryStrategies:
                 "continue_on_failure": False
             }
         }
-        
+
         error = Exception("Critical system failure")  # Not deferrable
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(critical_step, error, sample_workflow)
-        
+
         # Verify rollback strategy is selected
         assert recovery_strategy["strategy"] == "rollback_to_checkpoint"
         assert "Rolling back workflow" in recovery_strategy["message"]
@@ -248,14 +253,14 @@ class TestOrchestratorRecoveryStrategies:
             "fallback_enabled": False,
             "continue_on_failure": False
         }
-        
+
         error = ValueError("Configuration error")  # Not retryable, not deferrable
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(sample_step, error, sample_workflow)
-        
+
         # Verify fail workflow strategy is selected
         assert recovery_strategy["strategy"] == "fail_workflow"
         assert "Critical failure" in recovery_strategy["message"]
@@ -268,18 +273,18 @@ class TestOrchestratorRecoveryStrategies:
         sample_step["recovery_config"]["retry_base_delay"] = 2.0
         sample_step["recovery_config"]["backoff_factor"] = 2.0
         sample_step["recovery_config"]["max_retry_delay"] = 30.0
-        
+
         error = NetworkException("Temporary network issue")
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         recovery_strategy = await orchestrator_agent._handle_step_failure(sample_step, error, sample_workflow)
-        
+
         # Verify exponential backoff calculation
         assert recovery_strategy["strategy"] == "retry_with_exponential_backoff"
         delay = recovery_strategy["delay_seconds"]
-        
+
         # Base calculation: 2.0 * (2.0 ** (3-1)) = 2.0 * 4 = 8.0
         # With jitter, should be between 6.4 and 9.6 seconds
         assert 6.0 <= delay <= 10.0
@@ -294,18 +299,18 @@ class TestOrchestratorRecoveryStrategies:
             {"name": "validate", "type": "validate"},
             {"name": "load", "type": "load"}
         ]
-        
+
         expected_impacts = {
             "extract": "high",
-            "transform": "medium", 
+            "transform": "medium",
             "validate": "low",
             "load": "high"
         }
-        
+
         for step in steps:
             impact = await orchestrator_agent._assess_skip_impact(step, sample_workflow)
             assert impact["impact_level"] == expected_impacts[step["type"]]
-            
+
             # Check business continuity impact
             if step["type"] in ["extract", "load"]:
                 assert impact["business_continuity_impact"] is True
@@ -316,7 +321,7 @@ class TestOrchestratorRecoveryStrategies:
     async def test_fallback_configurations(self, orchestrator_agent, sample_workflow):
         """Test fallback configurations for different step types."""
         error = Exception("Generic error")
-        
+
         fallback_tests = [
             {
                 "step": {"type": "extract", "name": "extract_test"},
@@ -339,7 +344,7 @@ class TestOrchestratorRecoveryStrategies:
                 "expected_description": "relaxed validation rules"
             }
         ]
-        
+
         for test_case in fallback_tests:
             fallback = await orchestrator_agent._get_fallback_approach(test_case["step"], error, sample_workflow)
             assert fallback["approach"] == test_case["expected_approach"]
@@ -349,7 +354,7 @@ class TestOrchestratorRecoveryStrategies:
     async def test_degradation_configurations(self, orchestrator_agent, sample_workflow):
         """Test degradation configurations for different step types."""
         error = Exception("Generic error")
-        
+
         degradation_tests = [
             {
                 "step": {"type": "extract", "name": "extract_test"},
@@ -364,7 +369,7 @@ class TestOrchestratorRecoveryStrategies:
                 "expected_keys": ["essential_checks_only", "warning_instead_of_error", "skip_referential_integrity"]
             }
         ]
-        
+
         for test_case in degradation_tests:
             degradation = await orchestrator_agent._get_degradation_config(test_case["step"], error, sample_workflow)
             for key in test_case["expected_keys"]:
@@ -378,17 +383,17 @@ class TestOrchestratorRecoveryStrategies:
             RateLimitException("Rate limit error"),
             Exception("Generic error")
         ]
-        
+
         # Mock memory storage
         orchestrator_agent.memory.store_entry = AsyncMock()
-        
+
         for i, error in enumerate(errors):
             sample_step["attempt_number"] = i + 1
             await orchestrator_agent._handle_step_failure(sample_step, error, sample_workflow)
-        
+
         # Verify failure history tracking
         assert len(sample_workflow["failure_history"]) == 3
-        
+
         for i, failure in enumerate(sample_workflow["failure_history"]):
             assert failure["step_name"] == "transform_data"
             assert failure["attempt_number"] == i + 1
@@ -405,9 +410,9 @@ class TestOrchestratorRecoveryStrategies:
             {"recovery_strategy": "retry_with_exponential_backoff"},  # Duplicate
             {"error": "some error"}  # No recovery strategy
         ]
-        
+
         attempted_strategies = await orchestrator_agent._get_attempted_strategies(sample_workflow)
-        
+
         # Should return unique strategies only
         assert set(attempted_strategies) == {"retry_with_exponential_backoff", "fallback_approach"}
         assert len(attempted_strategies) == 2
@@ -421,9 +426,9 @@ class TestOrchestratorRecoveryStrategies:
             {"name": "after_extract", "timestamp": time.time() - 300},
             {"name": "after_transform", "timestamp": time.time() - 100}
         ]
-        
+
         rollback_point = await orchestrator_agent._find_rollback_point(sample_workflow)
-        
+
         # Should select the most recent checkpoint
         assert rollback_point["name"] == "after_transform"
         assert rollback_point["timestamp"] == sample_workflow["checkpoints"][2]["timestamp"]
@@ -435,9 +440,9 @@ class TestOrchestratorRecoveryStrategies:
             "workflow_id": "test_workflow",
             "started_at": time.time() - 1000
         }
-        
+
         rollback_point = await orchestrator_agent._find_rollback_point(workflow_without_checkpoints)
-        
+
         # Should return default rollback point
         assert rollback_point["name"] == "workflow_start"
         assert rollback_point["state"] == "initial"

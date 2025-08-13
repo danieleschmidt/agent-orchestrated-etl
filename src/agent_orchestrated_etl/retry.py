@@ -11,11 +11,11 @@ from typing import Any, Callable, List, Optional, Type, TypeVar
 
 from .exceptions import (
     AgentETLException,
-    NetworkException,
     ExternalServiceException,
+    NetworkException,
     RateLimitException,
-    is_retryable_exception,
     get_retry_delay,
+    is_retryable_exception,
 )
 
 F = TypeVar('F', bound=Callable[..., Any])
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class RetryConfig:
     """Configuration for retry behavior."""
-    
+
     def __init__(
         self,
         max_attempts: int = 3,
@@ -62,16 +62,16 @@ class RetryConfig:
             TimeoutError,
         ]
         self.backoff_strategy = backoff_strategy
-    
+
     def is_retryable(self, exception: Exception) -> bool:
         """Check if an exception is retryable based on configuration."""
         # Check our custom exception logic first
         if is_retryable_exception(exception):
             return True
-        
+
         # Check against configured exception types
         return any(isinstance(exception, exc_type) for exc_type in self.retryable_exceptions)
-    
+
     def calculate_delay(self, attempt: int, exception: Optional[Exception] = None) -> float:
         """Calculate delay for a retry attempt.
         
@@ -87,7 +87,7 @@ class RetryConfig:
             custom_delay = get_retry_delay(exception)
             if custom_delay is not None:
                 return min(custom_delay, self.max_delay)
-        
+
         # Calculate delay based on strategy
         if self.backoff_strategy == "exponential":
             delay = self.base_delay * (self.exponential_base ** (attempt - 1))
@@ -97,21 +97,21 @@ class RetryConfig:
             delay = self.base_delay
         else:
             raise ValueError(f"Unknown backoff strategy: {self.backoff_strategy}")
-        
+
         # Apply maximum delay limit
         delay = min(delay, self.max_delay)
-        
+
         # Add jitter if enabled
         if self.jitter:
             jitter_amount = delay * self.jitter_range * (2 * random.random() - 1)
             delay = max(0, delay + jitter_amount)
-        
+
         return delay
 
 
 class RetryContext:
     """Context information for retry operations."""
-    
+
     def __init__(self, config: RetryConfig, function_name: str = "unknown"):
         self.config = config
         self.function_name = function_name
@@ -119,33 +119,33 @@ class RetryContext:
         self.total_delay = 0.0
         self.start_time = time.time()
         self.exceptions: List[Exception] = []
-    
+
     def record_attempt(self, exception: Exception, delay: float) -> None:
         """Record a failed attempt."""
         self.attempt += 1
         self.total_delay += delay
         self.exceptions.append(exception)
-        
+
         logger.warning(
             f"Retry attempt {self.attempt}/{self.config.max_attempts} for {self.function_name} "
             f"failed with {type(exception).__name__}: {exception}. "
             f"Retrying in {delay:.2f} seconds."
         )
-    
+
     def should_retry(self, exception: Exception) -> bool:
         """Check if we should retry based on current state."""
         if self.attempt >= self.config.max_attempts:
             return False
-        
+
         return self.config.is_retryable(exception)
-    
+
     def get_final_exception(self) -> Exception:
         """Get the final exception to raise after all retries failed."""
         if not self.exceptions:
             return RuntimeError("No exceptions recorded in retry context")
-        
+
         last_exception = self.exceptions[-1]
-        
+
         # If it's our custom exception, add retry context
         if isinstance(last_exception, AgentETLException):
             last_exception.context.update({
@@ -153,7 +153,7 @@ class RetryContext:
                 "total_retry_delay": self.total_delay,
                 "retry_duration": time.time() - self.start_time,
             })
-        
+
         return last_exception
 
 
@@ -186,12 +186,12 @@ def retry(
             exponential_base=exponential_base,
             jitter=jitter,
         )
-    
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             context = RetryContext(config, func.__name__)
-            
+
             while True:
                 try:
                     return func(*args, **kwargs)
@@ -204,16 +204,16 @@ def retry(
                                 f"retry attempts in {time.time() - context.start_time:.2f} seconds"
                             )
                         raise context.get_final_exception() if context.exceptions else e
-                    
+
                     # Calculate delay and record attempt
                     delay = config.calculate_delay(context.attempt + 1, e)
                     context.record_attempt(e, delay)
-                    
+
                     # Wait before retrying
                     time.sleep(delay)
-        
+
         return wrapper
-    
+
     return decorator
 
 
@@ -246,12 +246,12 @@ def async_retry(
             exponential_base=exponential_base,
             jitter=jitter,
         )
-    
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             context = RetryContext(config, func.__name__)
-            
+
             while True:
                 try:
                     return await func(*args, **kwargs)
@@ -264,22 +264,22 @@ def async_retry(
                                 f"retry attempts in {time.time() - context.start_time:.2f} seconds"
                             )
                         raise context.get_final_exception() if context.exceptions else e
-                    
+
                     # Calculate delay and record attempt
                     delay = config.calculate_delay(context.attempt + 1, e)
                     context.record_attempt(e, delay)
-                    
+
                     # Wait before retrying
                     await asyncio.sleep(delay)
-        
+
         return wrapper
-    
+
     return decorator
 
 
 class RetryManager:
     """Manager for executing functions with retry logic."""
-    
+
     def __init__(self, config: Optional[RetryConfig] = None):
         """Initialize retry manager.
         
@@ -287,7 +287,7 @@ class RetryManager:
             config: Default retry configuration
         """
         self.default_config = config or RetryConfig()
-    
+
     def execute(
         self,
         func: Callable,
@@ -309,7 +309,7 @@ class RetryManager:
         retry_config = config or self.default_config
         decorated_func = retry(retry_config)(func)
         return decorated_func(*args, **kwargs)
-    
+
     async def execute_async(
         self,
         func: Callable,
@@ -336,7 +336,7 @@ class RetryManager:
 # Predefined retry configurations for common scenarios
 class RetryConfigs:
     """Predefined retry configurations for common scenarios."""
-    
+
     # Quick retries for fast operations
     FAST = RetryConfig(
         max_attempts=3,
@@ -344,7 +344,7 @@ class RetryConfigs:
         max_delay=1.0,
         exponential_base=2.0,
     )
-    
+
     # Standard retries for normal operations
     STANDARD = RetryConfig(
         max_attempts=3,
@@ -352,7 +352,7 @@ class RetryConfigs:
         max_delay=30.0,
         exponential_base=2.0,
     )
-    
+
     # Aggressive retries for critical operations
     AGGRESSIVE = RetryConfig(
         max_attempts=5,
@@ -360,7 +360,7 @@ class RetryConfigs:
         max_delay=60.0,
         exponential_base=1.5,
     )
-    
+
     # Patient retries for external services
     EXTERNAL_SERVICE = RetryConfig(
         max_attempts=5,
@@ -375,7 +375,7 @@ class RetryConfigs:
             TimeoutError,
         ]
     )
-    
+
     # Database operation retries
     DATABASE = RetryConfig(
         max_attempts=3,
@@ -388,7 +388,7 @@ class RetryConfigs:
             TimeoutError,
         ]
     )
-    
+
     # File system operation retries
     FILESYSTEM = RetryConfig(
         max_attempts=3,

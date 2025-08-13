@@ -7,28 +7,21 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from agent_orchestrated_etl.models import (
+    AgentConfiguration,
+    DataQualityMetrics,
+    DataSchema,
+    DataSource,
+    FieldSchema,
     PipelineConfig,
     PipelineExecution,
-    PipelineResult,
     TaskDefinition,
     TaskExecution,
-    TaskResult,
-    AgentConfiguration,
-    AgentPerformanceMetrics,
-    DataQualityMetrics,
-    DataSource,
-    DataSchema,
-    FieldSchema,
-    TransformationRule,
-    ValidationRule,
-    WorkflowState,
-    CommunicationMessage,
 )
 
 
 class PipelineConfigFactory:
     """Factory for creating pipeline configuration test objects."""
-    
+
     @staticmethod
     def create(
         pipeline_id: Optional[str] = None,
@@ -39,7 +32,7 @@ class PipelineConfigFactory:
         """Create a pipeline configuration for testing."""
         pipeline_id = pipeline_id or f"test-pipeline-{uuid.uuid4().hex[:8]}"
         name = name or f"Test Pipeline {pipeline_id}"
-        
+
         if not tasks:
             tasks = [
                 TaskDefinitionFactory.create(
@@ -60,7 +53,7 @@ class PipelineConfigFactory:
                     dependencies=["transform"]
                 )
             ]
-        
+
         return PipelineConfig(
             pipeline_id=pipeline_id,
             name=name,
@@ -90,7 +83,7 @@ class PipelineConfigFactory:
 
 class TaskDefinitionFactory:
     """Factory for creating task definition test objects."""
-    
+
     @staticmethod
     def create(
         task_id: Optional[str] = None,
@@ -101,7 +94,7 @@ class TaskDefinitionFactory:
         """Create a task definition for testing."""
         task_id = task_id or f"task-{uuid.uuid4().hex[:8]}"
         name = name or f"Test Task {task_id}"
-        
+
         return TaskDefinition(
             task_id=task_id,
             name=name,
@@ -123,7 +116,7 @@ class TaskDefinitionFactory:
 
 class PipelineExecutionFactory:
     """Factory for creating pipeline execution test objects."""
-    
+
     @staticmethod
     def create(
         execution_id: Optional[str] = None,
@@ -133,7 +126,7 @@ class PipelineExecutionFactory:
         """Create a pipeline execution for testing."""
         execution_id = execution_id or str(uuid.uuid4())
         pipeline_id = pipeline_id or f"test-pipeline-{uuid.uuid4().hex[:8]}"
-        
+
         return PipelineExecution(
             execution_id=execution_id,
             pipeline_id=pipeline_id,
@@ -146,7 +139,7 @@ class PipelineExecutionFactory:
 
 class TaskExecutionFactory:
     """Factory for creating task execution test objects."""
-    
+
     @staticmethod
     def create(
         execution_id: Optional[str] = None,
@@ -158,7 +151,7 @@ class TaskExecutionFactory:
         execution_id = execution_id or str(uuid.uuid4())
         task_id = task_id or f"task-{uuid.uuid4().hex[:8]}"
         pipeline_execution_id = pipeline_execution_id or str(uuid.uuid4())
-        
+
         return TaskExecution(
             execution_id=execution_id,
             task_id=task_id,
@@ -172,7 +165,7 @@ class TaskExecutionFactory:
 
 class AgentConfigurationFactory:
     """Factory for creating agent configuration test objects."""
-    
+
     @staticmethod
     def create(
         agent_id: Optional[str] = None,
@@ -183,7 +176,7 @@ class AgentConfigurationFactory:
         """Create an agent configuration for testing."""
         agent_id = agent_id or f"test-agent-{uuid.uuid4().hex[:8]}"
         name = name or f"Test Agent {agent_id}"
-        
+
         return AgentConfiguration(
             agent_id=agent_id,
             name=name,
@@ -199,7 +192,7 @@ class AgentConfigurationFactory:
 
 class DataQualityMetricsFactory:
     """Factory for creating data quality metrics test objects."""
-    
+
     @staticmethod
     def create(
         metrics_id: Optional[str] = None,
@@ -210,7 +203,7 @@ class DataQualityMetricsFactory:
         """Create data quality metrics for testing."""
         metrics_id = metrics_id or str(uuid.uuid4())
         data_source_id = data_source_id or f"test-source-{uuid.uuid4().hex[:8]}"
-        
+
         return DataQualityMetrics(
             metrics_id=metrics_id,
             data_source_id=data_source_id,
@@ -247,7 +240,7 @@ class DataQualityMetricsFactory:
 
 class DataSourceFactory:
     """Factory for creating data source test objects."""
-    
+
     @staticmethod
     def create(
         source_id: Optional[str] = None,
@@ -258,7 +251,7 @@ class DataSourceFactory:
         """Create a data source for testing."""
         source_id = source_id or f"test-source-{uuid.uuid4().hex[:8]}"
         name = name or f"Test Data Source {source_id}"
-        
+
         connection_configs = {
             "file": {
                 "path": "/tmp/test_data.csv",
@@ -280,7 +273,7 @@ class DataSourceFactory:
                 "authentication": {"type": "api_key"}
             }
         }
-        
+
         return DataSource(
             source_id=source_id,
             name=name,
@@ -294,7 +287,7 @@ class DataSourceFactory:
 
 class DataSchemaFactory:
     """Factory for creating data schema test objects."""
-    
+
     @staticmethod
     def create(
         schema_id: Optional[str] = None,
@@ -305,7 +298,7 @@ class DataSchemaFactory:
         """Create a data schema for testing."""
         schema_id = schema_id or f"test-schema-{uuid.uuid4().hex[:8]}"
         name = name or f"Test Schema {schema_id}"
-        
+
         if not fields:
             fields = [
                 FieldSchema(
@@ -336,7 +329,7 @@ class DataSchemaFactory:
                     description="Creation timestamp"
                 )
             ]
-        
+
         return DataSchema(
             schema_id=schema_id,
             name=name,
@@ -349,13 +342,13 @@ class DataSchemaFactory:
 
 class TestDataFactory:
     """Factory for creating various test data sets."""
-    
+
     @staticmethod
     def create_sample_records(count: int = 10) -> List[Dict[str, Any]]:
         """Create sample data records for testing."""
         records = []
         categories = ["A", "B", "C"]
-        
+
         for i in range(count):
             records.append({
                 "id": i + 1,
@@ -369,9 +362,9 @@ class TestDataFactory:
                     "version": "1.0"
                 }
             })
-        
+
         return records
-    
+
     @staticmethod
     def create_sample_pipeline_config() -> Dict[str, Any]:
         """Create sample pipeline configuration data."""
@@ -404,7 +397,7 @@ class TestDataFactory:
                 "minutes": 60
             }
         }
-    
+
     @staticmethod
     def create_sample_agent_metrics() -> Dict[str, Any]:
         """Create sample agent performance metrics."""
@@ -426,7 +419,7 @@ class TestDataFactory:
                 "peak": 768.0
             }
         }
-    
+
     @staticmethod
     def create_error_scenarios() -> List[Dict[str, Any]]:
         """Create various error scenarios for testing."""
@@ -471,13 +464,13 @@ class TestDataFactory:
 
 class MockResponseFactory:
     """Factory for creating mock responses for external services."""
-    
+
     @staticmethod
     def create_s3_list_response(objects: Optional[List[str]] = None) -> Dict[str, Any]:
         """Create mock S3 list objects response."""
         if objects is None:
             objects = ["data/file1.csv", "data/file2.csv"]
-        
+
         return {
             "Contents": [
                 {
@@ -489,39 +482,39 @@ class MockResponseFactory:
                 for obj in objects
             ]
         }
-    
+
     @staticmethod
     def create_database_response(rows: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Create mock database query response."""
         if rows is None:
             rows = TestDataFactory.create_sample_records(5)
-        
+
         return {
             "rows": rows,
             "row_count": len(rows),
             "columns": list(rows[0].keys()) if rows else [],
             "execution_time": 0.05
         }
-    
+
     @staticmethod
     def create_api_response(data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create mock API response."""
         if data is None:
             data = {"message": "success", "data": TestDataFactory.create_sample_records(3)}
-        
+
         return {
             "status_code": 200,
             "headers": {"Content-Type": "application/json"},
             "json": data,
             "response_time": 0.25
         }
-    
+
     @staticmethod
     def create_llm_response(content: Optional[str] = None) -> Dict[str, Any]:
         """Create mock LLM response."""
         if content is None:
             content = "This is a mock response from the language model."
-        
+
         return {
             "choices": [
                 {
