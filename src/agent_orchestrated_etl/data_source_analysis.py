@@ -685,14 +685,15 @@ def analyze_source(source_type: str, source_uri: Optional[str] = None) -> Dict[s
     """
     normalized = source_type.lower().strip()
 
-    # Additional security validation for source type
-    if not re.match(r'^[a-z0-9_]+$', normalized):
+    # Additional security validation for source type (allow common URL schemes)
+    base_type = normalized.split('://')[0] if '://' in normalized else normalized
+    if not re.match(r'^[a-z0-9_]+$', base_type):
         raise ValidationError("Source type contains invalid characters")
 
-    if normalized not in SUPPORTED_SOURCES:
-        raise ValueError(f"Unsupported source type: {source_type}")
+    if base_type not in SUPPORTED_SOURCES:
+        raise ValueError(f"Unsupported source type: {base_type}")
 
-    if normalized == "s3":
+    if base_type == "s3":
         if source_uri and source_uri.startswith('s3://'):
             # Perform real S3 analysis
             try:

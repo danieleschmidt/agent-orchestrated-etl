@@ -152,6 +152,39 @@ class TaskExecution(BaseModel):
             self.duration_seconds = self.completed_at - self.started_at
 
 
+class ExecutionContext(BaseModel):
+    """Context information for pipeline execution."""
+    
+    execution_id: str = Field(..., description="Unique execution identifier")
+    pipeline_id: str = Field(..., description="Pipeline identifier")
+    
+    # Execution environment
+    environment: str = Field("development", description="Execution environment")
+    user_id: Optional[str] = Field(None, description="User who triggered execution")
+    trigger_type: str = Field("manual", description="How execution was triggered")
+    
+    # Runtime context
+    start_time: float = Field(default_factory=time.time, description="Execution start time")
+    variables: Dict[str, Any] = Field(default_factory=dict, description="Runtime variables")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    
+    # Configuration overrides
+    config_overrides: Dict[str, Any] = Field(default_factory=dict, description="Configuration overrides")
+    resource_constraints: Dict[str, Any] = Field(default_factory=dict, description="Resource constraints")
+    
+    @validator('execution_id')
+    def validate_execution_id(cls, v):
+        if not v or not isinstance(v, str) or len(v.strip()) == 0:
+            raise ValueError('execution_id must be a non-empty string')
+        return v.strip()
+    
+    @validator('pipeline_id')
+    def validate_pipeline_id(cls, v):
+        if not v or not isinstance(v, str) or len(v.strip()) == 0:
+            raise ValueError('pipeline_id must be a non-empty string')
+        return v.strip()
+
+
 class TaskResult(BaseModel):
     """Result of a task execution."""
     
