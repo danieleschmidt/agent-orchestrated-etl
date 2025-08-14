@@ -20,17 +20,21 @@ def test_imports():
         print("✓ Validation functions imported successfully")
         
         from agent_orchestrated_etl.retry import RetryConfig, RetryConfigs
-        assert hasattr(RetryConfig, 'max_attempts')
+        retry_config = RetryConfig()
+        assert hasattr(retry_config, 'max_attempts')
         assert hasattr(RetryConfigs, 'STANDARD')
         print("✓ Retry classes imported successfully")
         
         from agent_orchestrated_etl.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
-        assert hasattr(CircuitBreakerConfig, 'failure_threshold')
-        assert hasattr(CircuitBreaker, 'call')
+        cb_config = CircuitBreakerConfig()
+        assert hasattr(cb_config, 'failure_threshold')
+        cb = CircuitBreaker("test", cb_config)
+        assert hasattr(cb, 'call')
         print("✓ Circuit breaker classes imported successfully")
         
         from agent_orchestrated_etl.graceful_degradation import DegradationConfig
-        assert hasattr(DegradationConfig, 'fallback_strategy')
+        deg_config = DegradationConfig()
+        assert hasattr(deg_config, 'fallback_strategy')
         print("✓ Graceful degradation classes imported successfully")
         
         from agent_orchestrated_etl.logging_config import get_logger
