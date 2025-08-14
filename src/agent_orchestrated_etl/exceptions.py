@@ -732,3 +732,12 @@ class SecurityException(AgentETLException):
     def _generate_user_message(self) -> str:
         violation = self.security_violation_type or "security violation"
         return f"Security error: {violation}. Access denied for security reasons."
+
+
+# Legacy aliases for backward compatibility
+ConfigurationError = ConfigurationException
+DatabaseException = DataSourceException
+BaseETLException = AgentETLException
+AgentCommunicationException = CommunicationException
+ResourceExhaustionException = ResourceExhaustedException
+ComplianceException = SecurityException
