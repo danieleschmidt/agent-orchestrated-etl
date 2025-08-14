@@ -137,8 +137,41 @@ class ValidationException(AgentETLException):
         return "Invalid input provided. Please check your parameters."
 
 
-# Legacy alias for backward compatibility
+# Compliance and Security Exceptions
+class ComplianceException(AgentETLException):
+    """Raised when compliance requirements are not met."""
+
+    def __init__(self, message: str, standard: str = "unknown", **kwargs):
+        super().__init__(
+            message,
+            category=ErrorCategory.COMPLIANCE,
+            context={"compliance_standard": standard},
+            **kwargs
+        )
+
+    def _generate_user_message(self) -> str:
+        standard = self.context.get("compliance_standard", "compliance standard")
+        return f"Compliance violation detected for {standard}. Please review your data handling practices."
+
+
+class SecurityException(AgentETLException):
+    """Raised when security policies are violated."""
+
+    def __init__(self, message: str, security_level: str = "medium", **kwargs):
+        super().__init__(
+            message,
+            category=ErrorCategory.SECURITY,
+            context={"security_level": security_level},
+            **kwargs
+        )
+
+    def _generate_user_message(self) -> str:
+        return "Security policy violation detected. Please review your security configuration."
+
+
+# Legacy aliases for backward compatibility
 ValidationError = ValidationException
+ConfigurationError = ConfigurationException
 
 
 # Authentication and Authorization Exceptions
@@ -339,6 +372,22 @@ class DataCorruptionException(DataProcessingException):
 
     def _generate_user_message(self) -> str:
         return "Data corruption detected. Processing has been halted for safety."
+
+
+class DatabaseException(DataSourceException):
+    """Raised when database operations fail."""
+
+    def __init__(self, message: str, **kwargs):
+        super().__init__(
+            message,
+            source_type="database",
+            severity=ErrorSeverity.MEDIUM,
+            retry_after=kwargs.pop("retry_after", 30.0),
+            **kwargs
+        )
+
+    def _generate_user_message(self) -> str:
+        return "Database operation failed. The operation will be retried automatically."
 
 
 # Pipeline Exceptions
