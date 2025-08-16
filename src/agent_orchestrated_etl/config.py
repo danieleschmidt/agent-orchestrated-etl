@@ -11,9 +11,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
-import yaml
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+try:
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+except ImportError:
+    FileSystemEventHandler = None
+    Observer = None
 
 from .validation import ValidationError, validate_environment_variable
 
@@ -596,7 +604,7 @@ def _validate_config(config: AppConfig) -> None:
             raise ValidationError(f"Cannot create {path_name} '{path_value}': {e}")
 
 
-class ConfigChangeHandler(FileSystemEventHandler):
+class ConfigChangeHandler(FileSystemEventHandler if FileSystemEventHandler else object):
     """Handler for configuration file changes."""
 
     def __init__(self, config_manager: ConfigManager):
@@ -743,6 +751,8 @@ class ConfigManager:
             content = config_path.read_text(encoding='utf-8')
 
             if config_path.suffix.lower() in ['.yaml', '.yml']:
+                if yaml is None:
+                    raise ValidationError("PyYAML is required for YAML config files")
                 return yaml.safe_load(content) or {}
             elif config_path.suffix.lower() == '.json':
                 return json.loads(content)

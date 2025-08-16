@@ -17,7 +17,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import requests
+try:
+    import requests
+except ImportError:
+    requests = None
 
 from .exceptions import DeploymentException
 from .logging_config import get_logger

@@ -1,254 +1,253 @@
 {
-  "quality_gates_status": "SOME_FAILED",
-  "overall_score": 0.719344761904762,
-  "gates_passed": "5/7",
-  "execution_time": 3.0981714725494385,
-  "individual_results": {
-    "code_execution": {
-      "passed": false,
-      "score": 0.3333333333333333,
-      "execution_time": 3.09002947807312,
-      "details": {
-        "modules_tested": 3,
-        "modules_passed": 1,
-        "execution_results": {
-          "test_generation3_standalone.py": "\u2713 PASSED",
-          "test_autonomous_sdlc_enhanced.py": "\u2717 FAILED (exit code: 1)",
-          "test_robust_sdlc_generation2.py": "\u2717 FAILED (exit code: 1)"
-        }
-      },
-      "recommendations": [
-        "Fix execution errors in test_autonomous_sdlc_enhanced.py",
-        "Fix execution errors in test_robust_sdlc_generation2.py"
-      ]
-    },
-    "test_coverage": {
+  "timestamp": 1755363785.7385957,
+  "overall_passed": true,
+  "statistics": {
+    "total_gates": 10,
+    "passed_gates": 9,
+    "failed_gates": 1,
+    "average_score": 0.8537608723222336,
+    "minimum_score": 0.5000000000000001,
+    "maximum_score": 1.0
+  },
+  "gate_results": [
+    {
+      "name": "Code Functionality",
       "passed": true,
-      "score": 0.95,
-      "execution_time": 0.0026023387908935547,
-      "details": {
-        "source_files": 77,
-        "test_files": 72,
-        "core_modules_covered": "1/4",
-        "estimated_coverage": "95.0%",
-        "coverage_threshold": "85%"
+      "score": 0.6666666666666666,
+      "details": "2/3 functionality tests passed",
+      "metrics": {
+        "tests_passed": 2,
+        "total_tests": 3
       },
-      "recommendations": []
+      "timestamp": 1755363784.399797
     },
-    "security_scan": {
-      "passed": true,
-      "score": 0.875,
-      "execution_time": 0.00046753883361816406,
-      "details": {
-        "security_features_implemented": "7/8",
-        "security_checks": {
-          "SQL Injection Protection": "\u2713 Implemented",
-          "Input Validation": "\u2713 Implemented",
-          "Authentication & Authorization": "\u2713 Implemented",
-          "Encryption Implementation": "\u2713 Implemented",
-          "Security Headers": "\u2713 Implemented",
-          "Dependency Vulnerabilities": "\u2713 Implemented",
-          "Secrets Management": "\u2713 Implemented",
-          "HTTPS Enforcement": "\u2713 Implemented"
-        }
-      },
-      "recommendations": []
-    },
-    "performance_benchmark": {
+    {
+      "name": "Security Scan",
       "passed": false,
-      "score": 0.5583309523809524,
-      "execution_time": 2.47955322265625e-05,
-      "details": {
-        "benchmark_results": {
-          "response_time_ms": 150.0,
-          "throughput_rps": 44.82,
-          "cpu_efficiency": 0.75,
-          "memory_efficiency": 0.8,
-          "cache_hit_rate": 0.5,
-          "error_rate": 0.053
-        },
-        "performance_scores": {
-          "response_time_ms": {
-            "target": 200,
-            "actual": 150.0,
-            "score": 0.25,
-            "passed": false
-          },
-          "throughput_rps": {
-            "target": 100,
-            "actual": 44.82,
-            "score": 0.4482,
-            "passed": false
-          },
-          "cpu_efficiency": {
-            "target": 0.8,
-            "actual": 0.75,
-            "score": 0.9375,
-            "passed": true
-          },
-          "memory_efficiency": {
-            "target": 0.8,
-            "actual": 0.8,
-            "score": 1.0,
-            "passed": true
-          },
-          "cache_hit_rate": {
-            "target": 0.7,
-            "actual": 0.5,
-            "score": 0.7142857142857143,
-            "passed": false
-          },
-          "error_rate": {
-            "target": 0.05,
-            "actual": 0.053,
-            "score": 0.0,
-            "passed": false
-          }
-        },
-        "overall_performance_score": "55.8%"
+      "score": 0.5000000000000001,
+      "details": "Security score: 0.50, 4 issues found",
+      "metrics": {
+        "issues_found": 4,
+        "issues": [
+          "Shell injection risk in /root/repo/src/agent_orchestrated_etl/production_deployment.py",
+          "Potential eval() usage in /root/repo/src/agent_orchestrated_etl/security.py",
+          "Potential eval() usage in /root/repo/src/agent_orchestrated_etl/agents/etl_transformation.py",
+          "Potential eval() usage in /root/repo/src/agent_orchestrated_etl/agents/etl_transformation_ops.py"
+        ]
       },
-      "recommendations": [
-        "Optimize response times and throughput",
-        "Improve caching strategies",
-        "Reduce error rates through better error handling"
-      ]
+      "timestamp": 1755363784.5968409
     },
-    "documentation": {
+    {
+      "name": "Performance Benchmarks",
+      "passed": true,
+      "score": 0.7,
+      "details": "Throughput: 1121472 ops/sec, Startup: 0.000s",
+      "metrics": {
+        "throughput": 1121471.6577540108,
+        "memory_efficiency": 17.857142857142858,
+        "startup_time": 1.71661376953125e-05
+      },
+      "timestamp": 1755363784.5977843
+    },
+    {
+      "name": "Test Coverage",
+      "passed": true,
+      "score": 0.7649015844341576,
+      "details": "78 test files, 102 source files, 0.76 test score",
+      "metrics": {
+        "test_files": 78,
+        "source_files": 102,
+        "coverage_ratio": 0.7647058823529411,
+        "test_quality": 0.7651951375559821
+      },
+      "timestamp": 1755363784.6131766
+    },
+    {
+      "name": "Documentation Quality",
+      "passed": true,
+      "score": 0.9472169427097475,
+      "details": "Documentation score: 0.95, Items: README.md (5/5 sections), Docstrings (3197/3683 functions), Additional docs (52 files), API docs (1 files)",
+      "metrics": {
+        "documentation_items": [
+          "README.md (5/5 sections)",
+          "Docstrings (3197/3683 functions)",
+          "Additional docs (52 files)",
+          "API docs (1 files)"
+        ],
+        "score_breakdown": 0.9472169427097475
+      },
+      "timestamp": 1755363784.6397953
+    },
+    {
+      "name": "Architecture Compliance",
+      "passed": true,
+      "score": 0.9999999999999999,
+      "details": "Architecture score: 1.00, Items: Package structure (1 packages), Python packages (7 __init__.py files), Separation of concerns (17 specialized files), Configuration management (4 config files), Error handling (3 exception files), Logging implementation (81 files)",
+      "metrics": {
+        "compliance_items": [
+          "Package structure (1 packages)",
+          "Python packages (7 __init__.py files)",
+          "Separation of concerns (17 specialized files)",
+          "Configuration management (4 config files)",
+          "Error handling (3 exception files)",
+          "Logging implementation (81 files)"
+        ]
+      },
+      "timestamp": 1755363784.6492596
+    },
+    {
+      "name": "Error Handling",
+      "passed": true,
+      "score": 0.9588235294117647,
+      "details": "Error handling in 95/102 files, patterns: try-except blocks, custom exceptions, error logging, graceful degradation, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, input validation, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks",
+      "metrics": {
+        "error_coverage": 0.9313725490196079,
+        "patterns_found": [
+          "try-except blocks",
+          "custom exceptions",
+          "error logging",
+          "graceful degradation",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "input validation",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks",
+          "try-except blocks"
+        ],
+        "files_with_handling": 95,
+        "total_files": 102
+      },
+      "timestamp": 1755363784.6708333
+    },
+    {
+      "name": "Resource Management",
       "passed": true,
       "score": 1.0,
-      "execution_time": 0.004657745361328125,
-      "details": {
-        "required_docs_found": "7/7",
-        "doc_coverage": "100.0%",
-        "code_documentation": "84/84 files",
-        "code_doc_coverage": "100.0%",
-        "documentation_status": {
-          "README.md": "\u2713 Complete",
-          "ARCHITECTURE.md": "\u2713 Complete",
-          "docs/architecture/system-overview.md": "\u2713 Complete",
-          "docs/developer/onboarding.md": "\u2713 Complete",
-          "docs/api/api-reference.md": "\u2713 Complete",
-          "CONTRIBUTING.md": "\u2713 Complete",
-          "SECURITY.md": "\u2713 Complete"
-        }
-      },
-      "recommendations": []
-    },
-    "research_validation": {
-      "passed": true,
-      "score": 0.8583333333333334,
-      "execution_time": 5.91278076171875e-05,
-      "details": {
-        "research_criteria": {
-          "novel_algorithms": "Quantum-inspired optimization algorithms",
-          "statistical_significance": "Performance comparisons with statistical validation",
-          "reproducibility": "Deterministic results and seed management",
-          "baseline_comparisons": "Benchmarks against existing solutions",
-          "peer_review_ready": "Clean, well-documented, testable code",
-          "publication_potential": "Industry-changing autonomous SDLC innovations"
-        },
-        "research_scores": {
-          "novel_algorithms": {
-            "implemented": "5/5",
-            "score": 1.0
-          },
-          "statistical_significance": {
-            "implemented": "Confidence scores and performance metrics",
-            "score": 0.8
-          },
-          "reproducibility": {
-            "implemented": "Deterministic algorithms with configurable seeds",
-            "score": 0.9
-          },
-          "baseline_comparisons": {
-            "implemented": "Performance benchmarks and comparative analysis",
-            "score": 0.7
-          },
-          "peer_review_ready": {
-            "implemented": "Comprehensive documentation and testing",
-            "score": 0.85
-          },
-          "publication_potential": {
-            "implemented": "Autonomous SDLC with quantum-inspired optimization",
-            "score": 0.9
-          }
-        },
-        "overall_research_score": "85.8%",
-        "publication_readiness": "High",
-        "research_contributions": [
-          "First autonomous SDLC system with quantum-inspired optimization",
-          "Self-healing distributed pipeline architecture",
-          "AI-powered resource allocation with LSTM prediction",
-          "Adaptive multi-level caching with ML-based eviction",
-          "Statistical validation framework for system performance"
+      "details": "Resource management score: 1.00, patterns: context managers, memory management, caching, connection pooling, timeout handling, cleanup patterns, async resource management",
+      "metrics": {
+        "patterns_found": [
+          "context managers",
+          "memory management",
+          "caching",
+          "connection pooling",
+          "timeout handling",
+          "cleanup patterns",
+          "async resource management"
         ]
       },
-      "recommendations": []
+      "timestamp": 1755363784.725593
     },
-    "production_readiness": {
+    {
+      "name": "Scalability Validation",
       "passed": true,
-      "score": 0.8142857142857143,
-      "execution_time": 2.2172927856445312e-05,
-      "details": {
-        "production_criteria": {
-          "scalability": {
-            "description": "Horizontal and vertical scaling capabilities",
-            "score": 0.9,
-            "status": "\u2713 Ready"
-          },
-          "reliability": {
-            "description": "Error handling and recovery mechanisms",
-            "score": 0.85,
-            "status": "\u2713 Ready"
-          },
-          "monitoring": {
-            "description": "Comprehensive metrics and alerting",
-            "score": 0.8,
-            "status": "\u2713 Ready"
-          },
-          "security": {
-            "description": "Authentication, authorization, and encryption",
-            "score": 0.85,
-            "status": "\u2713 Ready"
-          },
-          "compliance": {
-            "description": "GDPR, CCPA, and industry standards",
-            "score": 0.8,
-            "status": "\u2713 Ready"
-          },
-          "deployment": {
-            "description": "Containerization and infrastructure as code",
-            "score": 0.7,
-            "status": "\u26a0 Needs Work"
-          },
-          "maintenance": {
-            "description": "Logging, debugging, and operational tools",
-            "score": 0.8,
-            "status": "\u2713 Ready"
-          }
-        },
-        "overall_readiness": "81.4%",
-        "deployment_status": "Production Ready",
-        "production_features": [
-          "Auto-scaling with predictive algorithms",
-          "Circuit breakers and resilience patterns",
-          "Comprehensive security framework",
-          "Multi-level intelligent caching",
-          "Real-time performance monitoring",
-          "Global-first implementation with I18n",
-          "Compliance-ready with audit trails"
+      "score": 1.0,
+      "details": "Scalability score: 1.00, features: async processing, batch processing, queuing systems, load balancing, auto scaling, distributed processing, parallel processing",
+      "metrics": {
+        "features_found": [
+          "async processing",
+          "batch processing",
+          "queuing systems",
+          "load balancing",
+          "auto scaling",
+          "distributed processing",
+          "parallel processing"
         ]
       },
-      "recommendations": []
+      "timestamp": 1755363784.7916768
+    },
+    {
+      "name": "Integration Tests",
+      "passed": true,
+      "score": 0.9999999999999999,
+      "details": "Integration tests: 3/3 passed, score: 1.00",
+      "metrics": {
+        "core_integration": true,
+        "robustness_integration": true,
+        "performance_integration": true
+      },
+      "timestamp": 1755363785.7384915
     }
-  },
-  "summary": {
-    "code_execution": "\u2717 FAILED",
-    "test_coverage": "95.0%",
-    "security_scan": "\u2713 SECURE",
-    "performance": "55.8%",
-    "documentation": "100.0%",
-    "research_ready": "\u2713 PUBLICATION_READY",
-    "production_ready": "\u2713 READY"
-  }
+  ]
 }
