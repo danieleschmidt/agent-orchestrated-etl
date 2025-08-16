@@ -9,7 +9,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 from .exceptions import DataProcessingException, ValidationError
 from .logging_config import get_logger
