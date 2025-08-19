@@ -1,253 +1,100 @@
 {
-  "timestamp": 1755363785.7385957,
-  "overall_passed": true,
-  "statistics": {
-    "total_gates": 10,
-    "passed_gates": 9,
-    "failed_gates": 1,
-    "average_score": 0.8537608723222336,
-    "minimum_score": 0.5000000000000001,
-    "maximum_score": 1.0
-  },
-  "gate_results": [
-    {
-      "name": "Code Functionality",
+  "timestamp": 1755609418.5944533,
+  "overall_status": "PASS",
+  "gates": {
+    "Code Quality": {
       "passed": true,
-      "score": 0.6666666666666666,
-      "details": "2/3 functionality tests passed",
-      "metrics": {
-        "tests_passed": 2,
-        "total_tests": 3
-      },
-      "timestamp": 1755363784.399797
+      "score": 100,
+      "max_score": 100,
+      "issues": [],
+      "details": {
+        "existing_modules": 5,
+        "existing_config": 3,
+        "has_examples": true,
+        "has_tests": true
+      }
     },
-    {
-      "name": "Security Scan",
+    "Security": {
+      "passed": true,
+      "score": 100,
+      "max_score": 100,
+      "issues": [],
+      "details": {
+        "sql_injection_protection": false,
+        "has_sanitization": true,
+        "secure_logging": true
+      }
+    },
+    "Performance": {
+      "passed": true,
+      "score": 90,
+      "max_score": 100,
+      "issues": [
+        "Batch processing not implemented"
+      ],
+      "details": {
+        "has_performance_module": true,
+        "has_async_processing": true,
+        "has_monitoring": true
+      }
+    },
+    "Functionality": {
       "passed": false,
-      "score": 0.5000000000000001,
-      "details": "Security score: 0.50, 4 issues found",
-      "metrics": {
-        "issues_found": 4,
-        "issues": [
-          "Shell injection risk in /root/repo/src/agent_orchestrated_etl/production_deployment.py",
-          "Potential eval() usage in /root/repo/src/agent_orchestrated_etl/security.py",
-          "Potential eval() usage in /root/repo/src/agent_orchestrated_etl/agents/etl_transformation.py",
-          "Potential eval() usage in /root/repo/src/agent_orchestrated_etl/agents/etl_transformation_ops.py"
-        ]
-      },
-      "timestamp": 1755363784.5968409
+      "score": 60,
+      "max_score": 100,
+      "issues": [
+        "Some functionality tests failed",
+        "DataOrchestrator instantiation failed: No module named 'numpy'"
+      ],
+      "details": {
+        "import_successful": true,
+        "has_cli": true
+      }
     },
-    {
-      "name": "Performance Benchmarks",
+    "Documentation": {
       "passed": true,
-      "score": 0.7,
-      "details": "Throughput: 1121472 ops/sec, Startup: 0.000s",
-      "metrics": {
-        "throughput": 1121471.6577540108,
-        "memory_efficiency": 17.857142857142858,
-        "startup_time": 1.71661376953125e-05
-      },
-      "timestamp": 1755363784.5977843
+      "score": 97,
+      "max_score": 100,
+      "issues": [],
+      "details": {
+        "has_readme": true,
+        "documented_files": 9,
+        "has_examples": true
+      }
     },
-    {
-      "name": "Test Coverage",
+    "Configuration": {
       "passed": true,
-      "score": 0.7649015844341576,
-      "details": "78 test files, 102 source files, 0.76 test score",
-      "metrics": {
-        "test_files": 78,
-        "source_files": 102,
-        "coverage_ratio": 0.7647058823529411,
-        "test_quality": 0.7651951375559821
-      },
-      "timestamp": 1755363784.6131766
+      "score": 85,
+      "max_score": 100,
+      "issues": [
+        "CI/CD configuration not found"
+      ],
+      "details": {
+        "has_pyproject": true,
+        "has_requirements": true,
+        "has_docker": true,
+        "has_ci": false
+      }
     },
-    {
-      "name": "Documentation Quality",
+    "Architecture": {
       "passed": true,
-      "score": 0.9472169427097475,
-      "details": "Documentation score: 0.95, Items: README.md (5/5 sections), Docstrings (3197/3683 functions), Additional docs (52 files), API docs (1 files)",
-      "metrics": {
-        "documentation_items": [
-          "README.md (5/5 sections)",
-          "Docstrings (3197/3683 functions)",
-          "Additional docs (52 files)",
-          "API docs (1 files)"
-        ],
-        "score_breakdown": 0.9472169427097475
-      },
-      "timestamp": 1755363784.6397953
-    },
-    {
-      "name": "Architecture Compliance",
-      "passed": true,
-      "score": 0.9999999999999999,
-      "details": "Architecture score: 1.00, Items: Package structure (1 packages), Python packages (7 __init__.py files), Separation of concerns (17 specialized files), Configuration management (4 config files), Error handling (3 exception files), Logging implementation (81 files)",
-      "metrics": {
-        "compliance_items": [
-          "Package structure (1 packages)",
-          "Python packages (7 __init__.py files)",
-          "Separation of concerns (17 specialized files)",
-          "Configuration management (4 config files)",
-          "Error handling (3 exception files)",
-          "Logging implementation (81 files)"
-        ]
-      },
-      "timestamp": 1755363784.6492596
-    },
-    {
-      "name": "Error Handling",
-      "passed": true,
-      "score": 0.9588235294117647,
-      "details": "Error handling in 95/102 files, patterns: try-except blocks, custom exceptions, error logging, graceful degradation, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, input validation, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks, try-except blocks",
-      "metrics": {
-        "error_coverage": 0.9313725490196079,
-        "patterns_found": [
-          "try-except blocks",
-          "custom exceptions",
-          "error logging",
-          "graceful degradation",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "input validation",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks",
-          "try-except blocks"
-        ],
-        "files_with_handling": 95,
-        "total_files": 102
-      },
-      "timestamp": 1755363784.6708333
-    },
-    {
-      "name": "Resource Management",
-      "passed": true,
-      "score": 1.0,
-      "details": "Resource management score: 1.00, patterns: context managers, memory management, caching, connection pooling, timeout handling, cleanup patterns, async resource management",
-      "metrics": {
-        "patterns_found": [
-          "context managers",
-          "memory management",
-          "caching",
-          "connection pooling",
-          "timeout handling",
-          "cleanup patterns",
-          "async resource management"
-        ]
-      },
-      "timestamp": 1755363784.725593
-    },
-    {
-      "name": "Scalability Validation",
-      "passed": true,
-      "score": 1.0,
-      "details": "Scalability score: 1.00, features: async processing, batch processing, queuing systems, load balancing, auto scaling, distributed processing, parallel processing",
-      "metrics": {
-        "features_found": [
-          "async processing",
-          "batch processing",
-          "queuing systems",
-          "load balancing",
-          "auto scaling",
-          "distributed processing",
-          "parallel processing"
-        ]
-      },
-      "timestamp": 1755363784.7916768
-    },
-    {
-      "name": "Integration Tests",
-      "passed": true,
-      "score": 0.9999999999999999,
-      "details": "Integration tests: 3/3 passed, score: 1.00",
-      "metrics": {
-        "core_integration": true,
-        "robustness_integration": true,
-        "performance_integration": true
-      },
-      "timestamp": 1755363785.7384915
+      "score": 110,
+      "max_score": 100,
+      "issues": [],
+      "details": {
+        "structure_completeness": 100.0,
+        "has_separation": true
+      }
     }
+  },
+  "summary": {
+    "total_score": 642,
+    "max_possible_score": 700,
+    "overall_percentage": 91.71428571428571,
+    "gates_passed": 6,
+    "total_gates": 7
+  },
+  "recommendations": [
+    "Fix failing functionality tests and improve error handling"
   ]
 }
