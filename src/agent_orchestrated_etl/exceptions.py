@@ -173,6 +173,39 @@ class SecurityException(AgentETLException):
 ValidationError = ValidationException
 ConfigurationError = ConfigurationException
 
+# Research and Optimization Exceptions
+class OptimizationException(AgentETLException):
+    """Raised when optimization algorithms fail or produce invalid results."""
+
+    def __init__(self, message: str, algorithm: str = "unknown", **kwargs):
+        super().__init__(
+            message,
+            category=ErrorCategory.SYSTEM,
+            severity=ErrorSeverity.MEDIUM,
+            context={"algorithm": algorithm},
+            **kwargs
+        )
+
+    def _generate_user_message(self) -> str:
+        algorithm = self.context.get("algorithm", "optimization algorithm")
+        return f"Optimization failed in {algorithm}. Please check your input parameters."
+
+
+class FederatedLearningException(AgentETLException):
+    """Raised when federated learning operations fail."""
+
+    def __init__(self, message: str, node_id: str = "unknown", **kwargs):
+        super().__init__(
+            message,
+            category=ErrorCategory.SYSTEM,
+            severity=ErrorSeverity.MEDIUM,
+            context={"node_id": node_id},
+            **kwargs
+        )
+
+    def _generate_user_message(self) -> str:
+        return "Federated learning operation failed. Please check node connectivity and configuration."
+
 
 # Authentication and Authorization Exceptions
 class AuthenticationException(AgentETLException):
