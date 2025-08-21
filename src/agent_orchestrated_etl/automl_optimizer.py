@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import time
-import asyncio
-from typing import Any, Dict, List, Optional, Tuple, Union
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
-import hashlib
+from typing import Any, Dict, List
 
 from .exceptions import DataProcessingException
 from .logging_config import get_logger
@@ -50,13 +50,13 @@ class PipelineOptimization:
 
 class AutoMLOptimizer:
     """Advanced ML pipeline optimizer with automated model selection and hyperparameter tuning."""
-    
+
     def __init__(self, optimization_budget: int = 3600):  # 1 hour default budget
         self.logger = get_logger("agent_etl.automl")
         self.optimization_budget = optimization_budget  # seconds
         self.model_registry: Dict[str, ModelConfig] = {}
         self.optimization_history: List[PipelineOptimization] = []
-        
+
         # Performance tracking
         self.best_models: Dict[ModelType, ModelConfig] = {}
         self.optimization_metrics = {
@@ -66,63 +66,63 @@ class AutoMLOptimizer:
             "best_accuracy": 0.0,
             "performance_improvements": []
         }
-    
-    async def optimize_pipeline(self, 
-                              pipeline_data: List[Dict[str, Any]], 
+
+    async def optimize_pipeline(self,
+                              pipeline_data: List[Dict[str, Any]],
                               target_metric: str = "accuracy",
                               model_type: ModelType = ModelType.CLASSIFICATION) -> Dict[str, Any]:
         """Optimize an entire ML pipeline using AutoML techniques."""
         start_time = time.time()
         self.logger.info(f"Starting AutoML optimization for {model_type.value} task")
-        
+
         try:
             # Step 1: Data profiling and feature engineering
             data_profile = await self._profile_data(pipeline_data)
-            
+
             # Step 2: Automated feature selection
             feature_recommendations = await self._select_features(pipeline_data, data_profile, model_type)
-            
+
             # Step 3: Model selection and hyperparameter optimization
             best_model = await self._optimize_model(pipeline_data, feature_recommendations, model_type, target_metric)
-            
+
             # Step 4: Pipeline architecture optimization
             pipeline_optimizations = await self._optimize_pipeline_architecture(data_profile, best_model)
-            
+
             # Step 5: Generate optimization report
             optimization_report = self._generate_optimization_report(
                 data_profile, feature_recommendations, best_model, pipeline_optimizations
             )
-            
+
             elapsed_time = time.time() - start_time
             self.optimization_metrics["time_spent"] += elapsed_time
             self.optimization_metrics["successful_optimizations"] += 1
-            
+
             self.logger.info(f"AutoML optimization completed in {elapsed_time:.2f} seconds")
             return optimization_report
-            
+
         except Exception as e:
             self.logger.error(f"AutoML optimization failed: {str(e)}")
             raise DataProcessingException(f"Optimization failed: {str(e)}") from e
-    
+
     async def _profile_data(self, data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Profile the input data for optimization insights."""
         if not data:
             return {"error": "Empty dataset"}
-        
+
         # Basic statistics
         num_samples = len(data)
         num_features = len(data[0]) if data else 0
-        
+
         # Feature type analysis
         feature_types = {}
         missing_values = {}
-        
+
         for feature in data[0].keys():
             values = [row.get(feature) for row in data]
             non_null_values = [v for v in values if v is not None]
-            
+
             missing_values[feature] = (len(values) - len(non_null_values)) / len(values)
-            
+
             # Determine feature type
             if non_null_values:
                 sample_value = non_null_values[0]
@@ -136,7 +136,7 @@ class AutoMLOptimizer:
                         feature_types[feature] = "text"
                 else:
                     feature_types[feature] = "unknown"
-        
+
         return {
             "num_samples": num_samples,
             "num_features": num_features,
@@ -144,30 +144,30 @@ class AutoMLOptimizer:
             "missing_values": missing_values,
             "data_quality_score": 1.0 - sum(missing_values.values()) / len(missing_values)
         }
-    
-    async def _select_features(self, 
-                             data: List[Dict[str, Any]], 
+
+    async def _select_features(self,
+                             data: List[Dict[str, Any]],
                              data_profile: Dict[str, Any],
                              model_type: ModelType) -> Dict[str, Any]:
         """Automated feature selection and engineering."""
         self.logger.info("Performing automated feature selection")
-        
+
         feature_types = data_profile.get("feature_types", {})
         missing_values = data_profile.get("missing_values", {})
-        
+
         # Feature selection recommendations
         recommended_features = []
         feature_transformations = {}
-        
+
         for feature, feature_type in feature_types.items():
             missing_ratio = missing_values.get(feature, 0.0)
-            
+
             # Skip features with too many missing values
             if missing_ratio > 0.5:
                 continue
-            
+
             recommended_features.append(feature)
-            
+
             # Suggest transformations based on feature type
             if feature_type == "numeric":
                 feature_transformations[feature] = ["normalize", "standardize"]
@@ -175,43 +175,43 @@ class AutoMLOptimizer:
                 feature_transformations[feature] = ["one_hot_encode", "label_encode"]
             elif feature_type == "text":
                 feature_transformations[feature] = ["tfidf", "word_embeddings"]
-        
+
         # Feature importance simulation (in real implementation, use actual ML techniques)
         feature_importance = {
             feature: hash(feature) % 100 / 100.0  # Mock importance score
             for feature in recommended_features
         }
-        
+
         return {
             "recommended_features": recommended_features,
             "feature_transformations": feature_transformations,
             "feature_importance": feature_importance,
             "num_selected_features": len(recommended_features)
         }
-    
-    async def _optimize_model(self, 
-                            data: List[Dict[str, Any]], 
+
+    async def _optimize_model(self,
+                            data: List[Dict[str, Any]],
                             feature_config: Dict[str, Any],
                             model_type: ModelType,
                             target_metric: str) -> ModelConfig:
         """Optimize model selection and hyperparameters."""
         self.logger.info(f"Optimizing model for {model_type.value}")
-        
+
         # Algorithm candidates based on model type
         algorithm_candidates = self._get_algorithm_candidates(model_type)
-        
+
         best_model = None
         best_score = 0.0
-        
+
         for algorithm in algorithm_candidates:
             self.optimization_metrics["total_experiments"] += 1
-            
+
             # Simulate hyperparameter optimization
             best_params = await self._optimize_hyperparameters(algorithm, data, target_metric)
-            
+
             # Mock model evaluation (in real implementation, use cross-validation)
             performance_score = self._evaluate_model(algorithm, best_params, data)
-            
+
             model_config = ModelConfig(
                 model_type=model_type,
                 algorithm=algorithm,
@@ -222,24 +222,24 @@ class AutoMLOptimizer:
                 memory_usage=hash(algorithm) % 500 + 100.0,  # Mock memory usage
                 model_size=hash(algorithm) % 10000 + 1000  # Mock model size
             )
-            
+
             if performance_score > best_score:
                 best_score = performance_score
                 best_model = model_config
-            
+
             # Store model in registry
             model_id = hashlib.md5(f"{algorithm}_{json.dumps(best_params)}".encode()).hexdigest()
             self.model_registry[model_id] = model_config
-        
+
         if best_model:
             self.best_models[model_type] = best_model
             if target_metric == "accuracy":
                 self.optimization_metrics["best_accuracy"] = max(
                     self.optimization_metrics["best_accuracy"], best_score
                 )
-        
+
         return best_model
-    
+
     def _get_algorithm_candidates(self, model_type: ModelType) -> List[str]:
         """Get candidate algorithms for the given model type."""
         algorithms = {
@@ -250,10 +250,10 @@ class AutoMLOptimizer:
             ModelType.ANOMALY_DETECTION: ["isolation_forest", "one_class_svm", "autoencoder", "local_outlier_factor"]
         }
         return algorithms.get(model_type, ["default_algorithm"])
-    
-    async def _optimize_hyperparameters(self, 
-                                      algorithm: str, 
-                                      data: List[Dict[str, Any]], 
+
+    async def _optimize_hyperparameters(self,
+                                      algorithm: str,
+                                      data: List[Dict[str, Any]],
                                       target_metric: str) -> Dict[str, Any]:
         """Optimize hyperparameters for the given algorithm."""
         # Mock hyperparameter optimization (in real implementation, use Optuna, Hyperopt, etc.)
@@ -263,12 +263,12 @@ class AutoMLOptimizer:
             "svm": {"C": 1.0, "kernel": "rbf", "gamma": "scale"},
             "logistic_regression": {"C": 1.0, "solver": "liblinear", "max_iter": 1000}
         }
-        
+
         # Simulate optimization process
         await asyncio.sleep(0.1)  # Simulate computation time
-        
+
         return base_params.get(algorithm, {"default_param": 1.0})
-    
+
     def _evaluate_model(self, algorithm: str, params: Dict[str, Any], data: List[Dict[str, Any]]) -> float:
         """Evaluate model performance (mock implementation)."""
         # Mock evaluation - in real implementation, use cross-validation
@@ -278,19 +278,19 @@ class AutoMLOptimizer:
             "svm": 0.82,
             "logistic_regression": 0.80
         }
-        
+
         base_score = base_scores.get(algorithm, 0.75)
         # Add some randomness to simulate hyperparameter impact
         param_impact = sum(hash(str(v)) % 10 for v in params.values()) / (len(params) * 100.0)
-        
+
         return min(0.99, base_score + param_impact)
-    
-    async def _optimize_pipeline_architecture(self, 
-                                            data_profile: Dict[str, Any], 
+
+    async def _optimize_pipeline_architecture(self,
+                                            data_profile: Dict[str, Any],
                                             best_model: ModelConfig) -> List[PipelineOptimization]:
         """Optimize the overall pipeline architecture."""
         optimizations = []
-        
+
         # Data preprocessing optimizations
         if data_profile.get("data_quality_score", 1.0) < 0.9:
             optimizations.append(PipelineOptimization(
@@ -302,7 +302,7 @@ class AutoMLOptimizer:
                 confidence_score=0.8,
                 implementation_complexity="medium"
             ))
-        
+
         # Feature engineering optimizations
         if data_profile.get("num_features", 0) > 20:
             optimizations.append(PipelineOptimization(
@@ -314,7 +314,7 @@ class AutoMLOptimizer:
                 confidence_score=0.7,
                 implementation_complexity="low"
             ))
-        
+
         # Model serving optimizations
         if best_model and best_model.inference_time > 0.1:  # 100ms threshold
             optimizations.append(PipelineOptimization(
@@ -326,13 +326,13 @@ class AutoMLOptimizer:
                 confidence_score=0.9,
                 implementation_complexity="high"
             ))
-        
+
         self.optimization_history.extend(optimizations)
         return optimizations
-    
-    def _generate_optimization_report(self, 
+
+    def _generate_optimization_report(self,
                                     data_profile: Dict[str, Any],
-                                    feature_config: Dict[str, Any], 
+                                    feature_config: Dict[str, Any],
                                     best_model: ModelConfig,
                                     optimizations: List[PipelineOptimization]) -> Dict[str, Any]:
         """Generate comprehensive optimization report."""
@@ -354,28 +354,28 @@ class AutoMLOptimizer:
             "performance_metrics": self.optimization_metrics,
             "generated_at": time.time()
         }
-    
+
     def _calculate_implementation_effort(self, optimizations: List[PipelineOptimization]) -> str:
         """Calculate overall implementation effort."""
         complexity_scores = {"low": 1, "medium": 3, "high": 5}
         total_score = sum(complexity_scores.get(opt.implementation_complexity, 3) for opt in optimizations)
-        
+
         if total_score <= 5:
             return "low"
         elif total_score <= 15:
             return "medium"
         else:
             return "high"
-    
+
     def _generate_implementation_plan(self, optimizations: List[PipelineOptimization]) -> List[Dict[str, Any]]:
         """Generate step-by-step implementation plan."""
         # Sort by expected improvement and implementation complexity
         sorted_optimizations = sorted(
-            optimizations, 
+            optimizations,
             key=lambda x: (x.expected_improvement / {"low": 1, "medium": 2, "high": 3}[x.implementation_complexity]),
             reverse=True
         )
-        
+
         implementation_plan = []
         for i, opt in enumerate(sorted_optimizations, 1):
             implementation_plan.append({
@@ -386,9 +386,9 @@ class AutoMLOptimizer:
                 "dependencies": [],  # Would be populated based on pipeline stage dependencies
                 "success_criteria": f"Achieve {opt.expected_improvement:.1%} improvement in {opt.pipeline_stage}"
             })
-        
+
         return implementation_plan
-    
+
     def get_optimization_metrics(self) -> Dict[str, Any]:
         """Get comprehensive optimization metrics."""
         return {
@@ -396,7 +396,7 @@ class AutoMLOptimizer:
             "model_registry_size": len(self.model_registry),
             "optimization_history_size": len(self.optimization_history),
             "best_models_by_type": {
-                model_type.value: asdict(model) if model else None 
+                model_type.value: asdict(model) if model else None
                 for model_type, model in self.best_models.items()
             }
         }
@@ -406,25 +406,25 @@ class AutoMLOptimizer:
 async def demo_automl_optimization():
     """Demonstrate AutoML optimization capabilities."""
     logger = get_logger("agent_etl.automl.demo")
-    
+
     # Create sample dataset
     sample_data = [
         {"feature1": i, "feature2": i * 2, "feature3": f"category_{i % 3}", "target": i % 2}
         for i in range(1000)
     ]
-    
+
     optimizer = AutoMLOptimizer(optimization_budget=300)  # 5 minute budget
-    
+
     # Run optimization
     result = await optimizer.optimize_pipeline(
-        sample_data, 
+        sample_data,
         target_metric="accuracy",
         model_type=ModelType.CLASSIFICATION
     )
-    
+
     logger.info("AutoML Optimization Results:")
     logger.info(json.dumps(result, indent=2))
-    
+
     # Get final metrics
     metrics = optimizer.get_optimization_metrics()
     logger.info(f"Final optimization metrics: {metrics}")

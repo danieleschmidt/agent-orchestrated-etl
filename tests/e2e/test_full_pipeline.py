@@ -1,11 +1,8 @@
 """End-to-end tests for complete pipeline execution."""
 
-import os
 import tempfile
-from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_orchestrated_etl.orchestrator import DataOrchestrator
 
@@ -32,10 +29,10 @@ class TestFullPipelineE2E:
             "destination": "postgresql://localhost:5432/test_db",
             "transformations": ["clean_data", "validate_schema"],
         }
-        
+
         pipeline = self.orchestrator.create_pipeline(**config)
         assert pipeline is not None
-        
+
         # In a real test, this would execute against actual infrastructure
         # result = pipeline.execute()
         # assert result.success
@@ -48,7 +45,7 @@ class TestFullPipelineE2E:
             "destination": f"file://{self.temp_dir}/output.json",
             "schedule": "daily",
         }
-        
+
         pipeline = self.orchestrator.create_pipeline(**config)
         assert pipeline is not None
 
@@ -59,13 +56,13 @@ class TestFullPipelineE2E:
             "s3://bucket/dataset1/",
             "postgresql://db.example.com/table1",
         ]
-        
+
         config = {
             "sources": sources,
             "destination": f"file://{self.temp_dir}/aggregated.parquet",
             "transformations": ["merge_datasets", "deduplicate"],
         }
-        
+
         pipeline = self.orchestrator.create_pipeline(**config)
         assert pipeline is not None
 
@@ -76,10 +73,10 @@ class TestFullPipelineE2E:
             "destination": f"file://{self.temp_dir}/recovered.json",
             "retry_policy": {"max_retries": 3, "backoff": "exponential"},
         }
-        
+
         pipeline = self.orchestrator.create_pipeline(**config)
         assert pipeline is not None
-        
+
         # Test recovery behavior
         # This would simulate actual failures and recovery
 
@@ -93,7 +90,6 @@ class TestFullPipelineE2E:
                 "alerts": ["high_latency", "processing_errors"],
             },
         }
-        
+
         pipeline = self.orchestrator.create_pipeline(**config)
         assert pipeline is not None
-EOF < /dev/null

@@ -6,9 +6,9 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional
 
-from .exceptions import ConfigurationError, DeploymentException
+from .exceptions import ConfigurationError
 from .logging_config import get_logger
 
 
@@ -64,7 +64,7 @@ class MultiRegionManager:
         self.failover_regions: List[str] = []
         self._health_check_interval = 30  # seconds
         self._monitoring_task: Optional[asyncio.Task] = None
-        
+
         # Initialize default regions
         self._initialize_default_regions()
 
@@ -144,14 +144,14 @@ class MultiRegionManager:
                 capacity_limits={"max_pipelines": 300, "max_concurrent_jobs": 150}
             )
         ]
-        
+
         for region in default_regions:
             self.regions[region.code] = region
-            
+
         # Set primary region
         self.primary_region = "us-east-1"
         self.failover_regions = ["us-west-2", "eu-west-1"]
-        
+
         self.logger.info(f"Initialized {len(default_regions)} default regions")
 
     def add_region(self, region_config: RegionConfig) -> None:
@@ -162,7 +162,7 @@ class MultiRegionManager:
         """
         if region_config.code in self.regions:
             self.logger.warning(f"Region {region_config.code} already exists, updating configuration")
-        
+
         self.regions[region_config.code] = region_config
         self.logger.info(f"Added region: {region_config.name} ({region_config.code})")
 
@@ -177,17 +177,17 @@ class MultiRegionManager:
         """
         if region_code not in self.regions:
             return False
-        
+
         # Don't allow removing primary region
         if region_code == self.primary_region:
             raise ConfigurationError("Cannot remove primary region")
-        
+
         del self.regions[region_code]
-        
+
         # Remove from failover regions if present
         if region_code in self.failover_regions:
             self.failover_regions.remove(region_code)
-        
+
         self.logger.info(f"Removed region: {region_code}")
         return True
 
@@ -202,14 +202,14 @@ class MultiRegionManager:
         """
         if region_code not in self.regions:
             raise ConfigurationError(f"Region {region_code} not found")
-        
+
         region = self.regions[region_code]
         if region.status != RegionStatus.ACTIVE:
             raise ConfigurationError(f"Cannot set non-active region {region_code} as primary")
-        
+
         old_primary = self.primary_region
         self.primary_region = region_code
-        
+
         self.logger.info(f"Primary region changed from {old_primary} to {region_code}")
 
     def get_region(self, region_code: str) -> Optional[RegionConfig]:
@@ -278,25 +278,25 @@ class MultiRegionManager:
             Optimal region code or None if no suitable region found
         """
         candidates = self.get_active_regions()
-        
+
         # Filter by compliance requirements
         if compliance_requirements:
             candidates = [
                 region for region in candidates
                 if all(req in region.compliance_requirements for req in compliance_requirements)
             ]
-        
+
         # Filter by data residency requirement
         if data_residency:
             candidates = [region for region in candidates if region.data_residency_required]
-        
+
         if not candidates:
             self.logger.warning("No regions meet the specified criteria")
             return None
-        
+
         # Sort by priority and select best
         candidates.sort(key=lambda r: (r.priority, r.code))
-        
+
         # Consider latency if we have metrics
         if self.region_metrics and user_location:
             # Simple heuristic: prefer regions with lower latency
@@ -308,11 +308,11 @@ class MultiRegionManager:
                 (region, metrics) for region, metrics in candidates_with_metrics
                 if metrics is not None
             ]
-            
+
             if candidates_with_metrics:
                 candidates_with_metrics.sort(key=lambda x: x[1].latency_ms)
                 return candidates_with_metrics[0][0].code
-        
+
         return candidates[0].code
 
     async def initiate_failover(self, failed_region: str, reason: str) -> bool:
@@ -326,47 +326,47 @@ class MultiRegionManager:
             True if failover was successful
         """
         self.logger.warning(f"Initiating failover from {failed_region}: {reason}")
-        
+
         if failed_region not in self.regions:
             self.logger.error(f"Cannot failover from unknown region: {failed_region}")
             return False
-        
+
         # Mark the failed region
         self.regions[failed_region].status = RegionStatus.FAILOVER
-        
+
         # Select new primary if needed
         if failed_region == self.primary_region:
             # Find best failover candidate
             candidates = [
                 region for region_code, region in self.regions.items()
-                if (region.status == RegionStatus.ACTIVE and 
+                if (region.status == RegionStatus.ACTIVE and
                     region_code != failed_region and
                     region_code in self.failover_regions)
             ]
-            
+
             if not candidates:
                 # Fallback to any active region
                 candidates = [
                     region for region_code, region in self.regions.items()
                     if region.status == RegionStatus.ACTIVE and region_code != failed_region
                 ]
-            
+
             if candidates:
                 # Select highest priority (lowest number) candidate
                 candidates.sort(key=lambda r: r.priority)
                 new_primary = candidates[0].code
-                
+
                 self.logger.info(f"Failing over primary region from {failed_region} to {new_primary}")
                 self.primary_region = new_primary
-                
+
                 # TODO: Implement actual failover logic (DNS updates, load balancer changes, etc.)
                 await self._perform_region_failover(failed_region, new_primary)
-                
+
                 return True
             else:
                 self.logger.critical("No available regions for failover!")
                 return False
-        
+
         return True
 
     async def _perform_region_failover(self, from_region: str, to_region: str) -> None:
@@ -378,19 +378,19 @@ class MultiRegionManager:
         """
         # Simulate failover operations
         self.logger.info(f"Performing failover operations from {from_region} to {to_region}")
-        
+
         # Simulate DNS update
         await asyncio.sleep(1)
         self.logger.info("DNS records updated")
-        
+
         # Simulate load balancer reconfiguration
         await asyncio.sleep(0.5)
         self.logger.info("Load balancer reconfigured")
-        
+
         # Simulate data replication verification
         await asyncio.sleep(2)
         self.logger.info("Data replication verified")
-        
+
         self.logger.info(f"Failover completed: {from_region} -> {to_region}")
 
     def update_region_metrics(self, region_code: str, metrics: RegionMetrics) -> None:
@@ -401,7 +401,7 @@ class MultiRegionManager:
             metrics: Updated metrics
         """
         self.region_metrics[region_code] = metrics
-        
+
         # Check for automatic actions based on metrics
         self._evaluate_region_health(region_code, metrics)
 
@@ -415,27 +415,27 @@ class MultiRegionManager:
         region = self.regions.get(region_code)
         if not region:
             return
-        
+
         # Define health thresholds
         error_threshold = 0.05  # 5% error rate
         latency_threshold = 1000  # 1 second
         cpu_threshold = 0.90  # 90% CPU usage
         memory_threshold = 0.85  # 85% memory usage
-        
+
         issues = []
-        
+
         if metrics.error_rate > error_threshold:
             issues.append(f"High error rate: {metrics.error_rate:.2%}")
-        
+
         if metrics.latency_ms > latency_threshold:
             issues.append(f"High latency: {metrics.latency_ms}ms")
-        
+
         if metrics.cpu_usage > cpu_threshold:
             issues.append(f"High CPU usage: {metrics.cpu_usage:.1%}")
-        
+
         if metrics.memory_usage > memory_threshold:
             issues.append(f"High memory usage: {metrics.memory_usage:.1%}")
-        
+
         if issues:
             if len(issues) >= 2 or metrics.error_rate > 0.10:
                 # Mark as degraded
@@ -455,7 +455,7 @@ class MultiRegionManager:
         if self._monitoring_task and not self._monitoring_task.done():
             self.logger.warning("Region monitoring already running")
             return
-        
+
         self._monitoring_task = asyncio.create_task(self._monitoring_loop())
         self.logger.info("Started region health monitoring")
 
@@ -498,7 +498,7 @@ class MultiRegionManager:
         """
         # Simulate health check (in production, this would make actual HTTP requests)
         await asyncio.sleep(0.1)
-        
+
         # Simulate metrics
         import random
         metrics = RegionMetrics(
@@ -512,7 +512,7 @@ class MultiRegionManager:
             active_connections=random.randint(50, 500),
             last_updated=time.time()
         )
-        
+
         self.update_region_metrics(region_code, metrics)
 
     def get_region_status_summary(self) -> Dict[str, Any]:
@@ -524,7 +524,7 @@ class MultiRegionManager:
         active_count = sum(1 for r in self.regions.values() if r.status == RegionStatus.ACTIVE)
         degraded_count = sum(1 for r in self.regions.values() if r.status == RegionStatus.DEGRADED)
         inactive_count = sum(1 for r in self.regions.values() if r.status == RegionStatus.INACTIVE)
-        
+
         return {
             "total_regions": len(self.regions),
             "active_regions": active_count,
@@ -557,8 +557,8 @@ def get_multi_region_manager() -> MultiRegionManager:
         MultiRegionManager instance
     """
     global _multi_region_manager
-    
+
     if _multi_region_manager is None:
         _multi_region_manager = MultiRegionManager()
-    
+
     return _multi_region_manager

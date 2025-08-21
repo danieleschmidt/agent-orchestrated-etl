@@ -1,0 +1,21 @@
+{
+  "scan_id": "3366fa85",
+  "timestamp": "2025-08-21T06:17:54.181417",
+  "summary": {
+    "total_vulnerabilities": 0,
+    "critical_issues": 0,
+    "compliance_issues": 0,
+    "scan_coverage": {
+      "python_packages": "completed",
+      "containers": "failed",
+      "code_security": "completed",
+      "licenses": "partial"
+    }
+  },
+  "top_recommendations": [
+    "Enable automated dependency updates with Dependabot",
+    "Implement security scanning in CI/CD pipeline",
+    "Regular security training for development team",
+    "Consider implementing SLSA compliance framework"
+  ]
+}

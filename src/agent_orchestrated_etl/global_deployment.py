@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from .compliance import ComplianceStandard, get_compliance_manager
-from .exceptions import DeploymentException, ConfigurationError
+from .exceptions import ConfigurationError, DeploymentException
 from .internationalization import get_i18n_manager
 from .logging_config import get_logger
-from .multi_region import get_multi_region_manager, RegionStatus
+from .multi_region import RegionStatus, get_multi_region_manager
 
 
 class DeploymentStage(Enum):
@@ -59,11 +57,11 @@ class GlobalDeploymentManager:
         self.multi_region_manager = get_multi_region_manager()
         self.compliance_manager = get_compliance_manager()
         self.i18n_manager = get_i18n_manager()
-        
+
         self.deployments: Dict[str, GlobalConfiguration] = {}
         self.current_deployment: Optional[str] = None
         self.rollback_stack: List[str] = []
-        
+
         # Global configuration
         self.global_config = self._load_global_config()
 
@@ -173,7 +171,7 @@ class GlobalDeploymentManager:
             Data residency requirements mapping
         """
         requirements = {}
-        
+
         for region_code in regions:
             region = self.multi_region_manager.get_region(region_code)
             if region and region.data_residency_required:
@@ -186,7 +184,7 @@ class GlobalDeploymentManager:
                 # Other specific requirements can be added here
                 else:
                     requirements[region_code] = ['local_data']
-        
+
         return requirements
 
     def _determine_encryption_requirements(self, compliance_standards: List[ComplianceStandard]) -> Dict[str, bool]:
@@ -204,20 +202,20 @@ class GlobalDeploymentManager:
             'backup_data': False,
             'log_data': False
         }
-        
+
         # GDPR, HIPAA, PCI-DSS require encryption
         if any(std in compliance_standards for std in [
-            ComplianceStandard.GDPR, 
-            ComplianceStandard.HIPAA, 
+            ComplianceStandard.GDPR,
+            ComplianceStandard.HIPAA,
             ComplianceStandard.PCI_DSS
         ]):
-            requirements = {key: True for key in requirements}
-        
+            requirements = dict.fromkeys(requirements, True)
+
         # SOC2 Type II requires encryption in transit and at rest
         if ComplianceStandard.SOC2 in compliance_standards:
             requirements['data_at_rest'] = True
             requirements['data_in_transit'] = True
-        
+
         return requirements
 
     def _create_monitoring_config(self, stage: DeploymentStage) -> Dict[str, Any]:
@@ -236,7 +234,7 @@ class GlobalDeploymentManager:
             "enable_profiling": False,
             "enable_tracing": True
         }
-        
+
         if stage == DeploymentStage.PRODUCTION:
             base_config.update({
                 "metrics_collection_interval_seconds": 30,
@@ -255,7 +253,7 @@ class GlobalDeploymentManager:
                 "enable_profiling": True,
                 "enable_alerting": False
             })
-        
+
         return base_config
 
     def _create_resource_limits(self, stage: DeploymentStage) -> Dict[str, Any]:
@@ -341,11 +339,11 @@ class GlobalDeploymentManager:
         try:
             # Pre-deployment validation
             await self._validate_deployment_readiness(config)
-            
+
             # Enable compliance standards
             for standard in config.compliance_standards:
                 self.compliance_manager.enable_compliance_standard(standard)
-            
+
             # Deploy based on strategy
             if config.strategy == DeploymentStrategy.BLUE_GREEN:
                 success = await self._deploy_blue_green(config)
@@ -355,20 +353,20 @@ class GlobalDeploymentManager:
                 success = await self._deploy_canary(config)
             else:  # ALL_AT_ONCE
                 success = await self._deploy_all_at_once(config)
-            
+
             if success:
                 self.current_deployment = deployment_id
                 self.rollback_stack.append(deployment_id)
                 self.logger.info(f"Global deployment completed successfully: {deployment_id}")
-                
+
                 # Configure I18n for deployed regions
                 await self._configure_regional_i18n(config.regions)
-                
+
                 return True
             else:
                 self.logger.error(f"Global deployment failed: {deployment_id}")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Global deployment error: {e}")
             await self._handle_deployment_failure(config, str(e))
@@ -386,15 +384,15 @@ class GlobalDeploymentManager:
             region = self.multi_region_manager.get_region(region_code)
             if not region or region.status != RegionStatus.ACTIVE:
                 unhealthy_regions.append(region_code)
-        
+
         if unhealthy_regions:
             raise DeploymentException(f"Unhealthy regions detected: {unhealthy_regions}")
-        
+
         # Validate compliance requirements
         compliance_validation = self.compliance_manager.validate_compliance_status()
         if compliance_validation["overall_status"] == "non_compliant":
             raise DeploymentException(f"Compliance validation failed: {compliance_validation['issues']}")
-        
+
         self.logger.info("Deployment readiness validation passed")
 
     async def _deploy_rolling(self, config: GlobalConfiguration) -> bool:
@@ -407,29 +405,29 @@ class GlobalDeploymentManager:
             True if successful
         """
         self.logger.info("Executing rolling deployment strategy")
-        
+
         max_concurrent = self.global_config["deployment"]["max_concurrent_regions"]
-        
+
         # Deploy to regions in batches
         for i in range(0, len(config.regions), max_concurrent):
             batch = config.regions[i:i + max_concurrent]
-            
+
             # Deploy to batch concurrently
             tasks = [self._deploy_to_region(region, config) for region in batch]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Check for failures
             for region, result in zip(batch, results):
                 if isinstance(result, Exception) or not result:
                     self.logger.error(f"Deployment failed for region {region}: {result}")
                     return False
-            
+
             self.logger.info(f"Successfully deployed to batch: {batch}")
-            
+
             # Wait between batches for production deployments
             if config.stage == DeploymentStage.PRODUCTION:
                 await asyncio.sleep(30)
-        
+
         return True
 
     async def _deploy_blue_green(self, config: GlobalConfiguration) -> bool:
@@ -442,21 +440,21 @@ class GlobalDeploymentManager:
             True if successful
         """
         self.logger.info("Executing blue-green deployment strategy")
-        
+
         # Deploy to all regions in parallel (green environment)
         tasks = [self._deploy_to_region(region, config, environment="green") for region in config.regions]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Check if all deployments succeeded
         for region, result in zip(config.regions, results):
             if isinstance(result, Exception) or not result:
                 self.logger.error(f"Green deployment failed for region {region}: {result}")
                 return False
-        
+
         # Switch traffic to green environment
         self.logger.info("Switching traffic to green environment")
         await self._switch_traffic_to_green(config.regions)
-        
+
         return True
 
     async def _deploy_canary(self, config: GlobalConfiguration) -> bool:
@@ -469,31 +467,31 @@ class GlobalDeploymentManager:
             True if successful
         """
         self.logger.info("Executing canary deployment strategy")
-        
+
         # Select canary regions (first 20% or at least 1)
         canary_count = max(1, len(config.regions) // 5)
         canary_regions = config.regions[:canary_count]
         remaining_regions = config.regions[canary_count:]
-        
+
         # Deploy to canary regions first
         self.logger.info(f"Deploying to canary regions: {canary_regions}")
         tasks = [self._deploy_to_region(region, config) for region in canary_regions]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         for region, result in zip(canary_regions, results):
             if isinstance(result, Exception) or not result:
                 self.logger.error(f"Canary deployment failed for region {region}: {result}")
                 return False
-        
+
         # Monitor canary for issues
         self.logger.info("Monitoring canary deployment...")
         await asyncio.sleep(300)  # 5 minutes monitoring
-        
+
         canary_healthy = await self._check_canary_health(canary_regions)
         if not canary_healthy:
             self.logger.error("Canary deployment showing issues, aborting full deployment")
             return False
-        
+
         # Deploy to remaining regions
         self.logger.info(f"Canary successful, deploying to remaining regions: {remaining_regions}")
         return await self._deploy_rolling(GlobalConfiguration(
@@ -520,17 +518,17 @@ class GlobalDeploymentManager:
             True if successful
         """
         self.logger.info("Executing all-at-once deployment strategy")
-        
+
         # Deploy to all regions simultaneously
         tasks = [self._deploy_to_region(region, config) for region in config.regions]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Check for any failures
         for region, result in zip(config.regions, results):
             if isinstance(result, Exception) or not result:
                 self.logger.error(f"Deployment failed for region {region}: {result}")
                 return False
-        
+
         return True
 
     async def _deploy_to_region(self, region_code: str, config: GlobalConfiguration, environment: str = "blue") -> bool:
@@ -545,23 +543,23 @@ class GlobalDeploymentManager:
             True if successful
         """
         self.logger.info(f"Deploying to region {region_code} (environment: {environment})")
-        
+
         try:
             # Simulate deployment steps
             await asyncio.sleep(2)  # Simulate deployment time
-            
+
             # Apply regional configuration
             await self._apply_regional_config(region_code, config)
-            
+
             # Configure compliance for region
             await self._configure_regional_compliance(region_code, config)
-            
+
             # Start regional monitoring
             await self._start_regional_monitoring(region_code, config)
-            
+
             self.logger.info(f"Successfully deployed to region {region_code}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Failed to deploy to region {region_code}: {e}")
             return False
@@ -576,7 +574,7 @@ class GlobalDeploymentManager:
         region = self.multi_region_manager.get_region(region_code)
         if not region:
             return
-        
+
         # Configure timezone
         regional_config = {
             "region_code": region_code,
@@ -586,11 +584,11 @@ class GlobalDeploymentManager:
             "resource_limits": config.resource_limits,
             "feature_flags": config.feature_flags
         }
-        
+
         # Apply data residency requirements
         if region_code in config.data_residency_requirements:
             regional_config["data_residency"] = config.data_residency_requirements[region_code]
-        
+
         self.logger.debug(f"Applied regional configuration for {region_code}")
 
     async def _configure_regional_compliance(self, region_code: str, config: GlobalConfiguration) -> None:
@@ -603,12 +601,12 @@ class GlobalDeploymentManager:
         region = self.multi_region_manager.get_region(region_code)
         if not region:
             return
-        
+
         # Enable compliance standards supported by the region
         for standard in config.compliance_standards:
             if standard.value in [req.lower() for req in region.compliance_requirements]:
                 self.compliance_manager.enable_compliance_standard(standard)
-        
+
         self.logger.debug(f"Configured compliance for region {region_code}")
 
     async def _configure_regional_i18n(self, regions: List[str]) -> None:
@@ -626,7 +624,7 @@ class GlobalDeploymentManager:
             'ap-northeast-1': 'ja-JP',
             'ap-southeast-1': 'en-SG'
         }
-        
+
         for region in regions:
             if region in region_locale_mapping:
                 locale = region_locale_mapping[region]
@@ -643,7 +641,7 @@ class GlobalDeploymentManager:
         # Configure monitoring based on deployment stage
         monitoring_config = config.monitoring_config.copy()
         monitoring_config["region"] = region_code
-        
+
         self.logger.debug(f"Started monitoring for region {region_code}")
 
     async def _switch_traffic_to_green(self, regions: List[str]) -> None:
@@ -671,7 +669,7 @@ class GlobalDeploymentManager:
             # In production, this would check actual metrics
             await asyncio.sleep(1)
             self.logger.info(f"Canary health check passed for {region}")
-        
+
         return True
 
     async def _handle_deployment_failure(self, config: GlobalConfiguration, error: str) -> None:
@@ -682,7 +680,7 @@ class GlobalDeploymentManager:
             error: Error message
         """
         self.logger.error(f"Handling deployment failure for {config.deployment_id}: {error}")
-        
+
         # Attempt automatic rollback if possible
         if self.rollback_stack:
             last_successful = self.rollback_stack[-1]
@@ -700,21 +698,21 @@ class GlobalDeploymentManager:
         """
         if not deployment_id and self.rollback_stack:
             deployment_id = self.rollback_stack[-1]
-        
+
         if not deployment_id or deployment_id not in self.deployments:
             raise DeploymentException("No valid deployment to rollback to")
-        
+
         self.logger.info(f"Rolling back to deployment: {deployment_id}")
-        
+
         # Execute rollback deployment
         config = self.deployments[deployment_id]
         success = await self.deploy_globally(deployment_id)
-        
+
         if success:
             self.logger.info(f"Rollback completed successfully to {deployment_id}")
         else:
             self.logger.error(f"Rollback failed for {deployment_id}")
-        
+
         return success
 
     def get_deployment_status(self) -> Dict[str, Any]:
@@ -724,7 +722,7 @@ class GlobalDeploymentManager:
             Deployment status information
         """
         region_manager = self.multi_region_manager
-        
+
         return {
             "current_deployment": self.current_deployment,
             "total_deployments": len(self.deployments),
@@ -747,8 +745,8 @@ def get_global_deployment_manager() -> GlobalDeploymentManager:
         GlobalDeploymentManager instance
     """
     global _global_deployment_manager
-    
+
     if _global_deployment_manager is None:
         _global_deployment_manager = GlobalDeploymentManager()
-    
+
     return _global_deployment_manager

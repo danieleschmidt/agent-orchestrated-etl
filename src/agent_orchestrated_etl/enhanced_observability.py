@@ -4,27 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 import math
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable
-from dataclasses import dataclass, asdict
-from enum import Enum
+import time
 from collections import defaultdict, deque
-import hashlib
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 # Use built-in statistics instead of numpy for compatibility
 try:
     import numpy as np
     HAS_NUMPY = True
 except ImportError:
     HAS_NUMPY = False
-    
+
     # Provide numpy-like functions using built-in math
     class np:
         @staticmethod
         def mean(data):
             return sum(data) / len(data) if data else 0
-        
+
         @staticmethod
         def median(data):
             sorted_data = sorted(data)
@@ -32,7 +32,7 @@ except ImportError:
             if n == 0:
                 return 0
             return sorted_data[n//2] if n % 2 == 1 else (sorted_data[n//2-1] + sorted_data[n//2]) / 2
-        
+
         @staticmethod
         def std(data):
             if not data:
@@ -40,15 +40,15 @@ except ImportError:
             mean_val = np.mean(data)
             variance = sum((x - mean_val) ** 2 for x in data) / len(data)
             return variance ** 0.5
-        
+
         @staticmethod
         def min(data):
             return min(data) if data else 0
-        
+
         @staticmethod
         def max(data):
             return max(data) if data else 0
-        
+
         @staticmethod
         def percentile(data, percentile):
             if not data:
@@ -61,40 +61,39 @@ except ImportError:
                 return sorted_data[f] + c * (sorted_data[f + 1] - sorted_data[f])
             else:
                 return sorted_data[f]
-        
+
         @staticmethod
         def corrcoef(x, y):
             # Simple correlation coefficient calculation
             if len(x) != len(y) or len(x) < 2:
                 return [[1.0, 0.0], [0.0, 1.0]]
-            
+
             mean_x = np.mean(x)
             mean_y = np.mean(y)
-            
+
             numerator = sum((x[i] - mean_x) * (y[i] - mean_y) for i in range(len(x)))
             sum_sq_x = sum((x[i] - mean_x) ** 2 for i in range(len(x)))
             sum_sq_y = sum((y[i] - mean_y) ** 2 for i in range(len(y)))
-            
+
             denominator = (sum_sq_x * sum_sq_y) ** 0.5
-            
+
             if denominator == 0:
                 return [[1.0, 0.0], [0.0, 1.0]]
-            
+
             corr = numerator / denominator
             return [[1.0, corr], [corr, 1.0]]
-        
+
         @staticmethod
         def isnan(value):
             return value != value  # NaN is not equal to itself
 
-from .exceptions import DataProcessingException
 from .logging_config import get_logger
 
 
 class MetricType(Enum):
     """Types of metrics that can be observed."""
     COUNTER = "counter"
-    GAUGE = "gauge" 
+    GAUGE = "gauge"
     HISTOGRAM = "histogram"
     SUMMARY = "summary"
     TIMER = "timer"
@@ -185,45 +184,45 @@ class SLO:
 
 class IntelligentObservabilityPlatform:
     """Enhanced observability platform with ML-powered insights."""
-    
+
     def __init__(self, max_history_points: int = 10000):
         self.logger = get_logger("agent_etl.observability")
         self.max_history_points = max_history_points
-        
+
         # Metric storage
         self.metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=max_history_points))
         self.metric_metadata: Dict[str, Dict[str, Any]] = {}
-        
+
         # Alerting system
         self.alert_rules: Dict[str, Dict[str, Any]] = {}
         self.active_alerts: Dict[str, Alert] = {}
         self.alert_history: List[Alert] = []
         self.alert_callbacks: List[Callable[[Alert], None]] = []
-        
+
         # Anomaly detection
         self.anomaly_detectors: Dict[str, Dict[str, Any]] = {}
         self.detected_anomalies: List[Anomaly] = []
-        
+
         # SLI/SLO monitoring
         self.slis: Dict[str, SLI] = {}
         self.slos: Dict[str, SLO] = {}
         self.slo_history: Dict[str, List[Tuple[float, float]]] = defaultdict(list)  # (timestamp, slo_value)
-        
+
         # Performance and correlation analysis
         self.correlation_matrix: Dict[Tuple[str, str], float] = {}
         self.performance_baselines: Dict[str, Dict[str, float]] = {}
-        
+
         # Background processing
         self.executor = ThreadPoolExecutor(max_workers=4)
         self.analysis_interval = 60  # seconds
         self._analysis_task: Optional[asyncio.Task] = None
-        
+
         # Initialize built-in metrics
         self._initialize_system_metrics()
-    
+
     def _initialize_system_metrics(self):
         """Initialize system-level observability metrics."""
-        
+
         # Core system metrics
         system_metrics = [
             ("system.cpu.utilization", MetricType.GAUGE, "CPU utilization percentage"),
@@ -238,7 +237,7 @@ class IntelligentObservabilityPlatform:
             ("pipeline.queue.size", MetricType.GAUGE, "Pipeline queue size"),
             ("pipeline.success.rate", MetricType.GAUGE, "Pipeline success rate")
         ]
-        
+
         for metric_name, metric_type, description in system_metrics:
             self.metric_metadata[metric_name] = {
                 "type": metric_type,
@@ -246,7 +245,7 @@ class IntelligentObservabilityPlatform:
                 "unit": self._get_metric_unit(metric_name),
                 "created_at": time.time()
             }
-    
+
     def _get_metric_unit(self, metric_name: str) -> str:
         """Get appropriate unit for a metric."""
         if "duration" in metric_name or "time" in metric_name:
@@ -259,13 +258,13 @@ class IntelligentObservabilityPlatform:
             return "count"
         else:
             return "unit"
-    
+
     async def start_monitoring(self):
         """Start the observability platform."""
         if self._analysis_task is None:
             self.logger.info("Starting intelligent observability platform")
             self._analysis_task = asyncio.create_task(self._continuous_analysis())
-    
+
     async def stop_monitoring(self):
         """Stop the observability platform."""
         if self._analysis_task:
@@ -276,23 +275,23 @@ class IntelligentObservabilityPlatform:
             except asyncio.CancelledError:
                 pass
             self._analysis_task = None
-    
-    def record_metric(self, 
-                     metric_name: str, 
-                     value: float, 
+
+    def record_metric(self,
+                     metric_name: str,
+                     value: float,
                      labels: Optional[Dict[str, str]] = None,
                      metadata: Optional[Dict[str, Any]] = None):
         """Record a metric data point."""
-        
+
         point = MetricPoint(
             timestamp=time.time(),
             value=value,
             labels=labels or {},
             metadata=metadata or {}
         )
-        
+
         self.metrics[metric_name].append(point)
-        
+
         # Update metric metadata if not exists
         if metric_name not in self.metric_metadata:
             self.metric_metadata[metric_name] = {
@@ -302,7 +301,7 @@ class IntelligentObservabilityPlatform:
                 "created_at": time.time(),
                 "auto_discovered": True
             }
-    
+
     def add_alert_rule(self,
                       rule_name: str,
                       metric_name: str,
@@ -312,7 +311,7 @@ class IntelligentObservabilityPlatform:
                       window_minutes: int = 5,
                       runbook_url: Optional[str] = None):
         """Add an alerting rule."""
-        
+
         self.alert_rules[rule_name] = {
             "metric_name": metric_name,
             "condition": condition,  # "gt", "lt", "eq", "ne"
@@ -323,15 +322,15 @@ class IntelligentObservabilityPlatform:
             "enabled": True,
             "created_at": time.time()
         }
-        
+
         self.logger.info(f"Added alert rule: {rule_name} for metric {metric_name}")
-    
+
     def add_anomaly_detector(self,
                            metric_name: str,
                            sensitivity: float = 0.8,
                            seasonal_period: Optional[int] = None):
         """Add anomaly detection for a metric."""
-        
+
         self.anomaly_detectors[metric_name] = {
             "sensitivity": sensitivity,
             "seasonal_period": seasonal_period,
@@ -339,72 +338,72 @@ class IntelligentObservabilityPlatform:
             "enabled": True,
             "created_at": time.time()
         }
-        
+
         self.logger.info(f"Added anomaly detector for metric: {metric_name}")
-    
+
     def add_slo(self, slo: SLO):
         """Add a Service Level Objective."""
         self.slos[slo.name] = slo
         self.slis[slo.sli.name] = slo.sli
-        
+
         self.logger.info(f"Added SLO: {slo.name} with target {slo.target}%")
-    
+
     def register_alert_callback(self, callback: Callable[[Alert], None]):
         """Register callback for alert notifications."""
         self.alert_callbacks.append(callback)
-    
+
     async def _continuous_analysis(self):
         """Continuous analysis loop for anomaly detection and alerting."""
-        
+
         while True:
             try:
                 await asyncio.sleep(self.analysis_interval)
-                
+
                 # Run analysis tasks
                 await self._check_alert_rules()
                 await self._detect_anomalies()
                 await self._update_correlations()
                 await self._calculate_slo_compliance()
                 await self._update_baselines()
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 self.logger.error(f"Error in continuous analysis: {str(e)}")
-    
+
     async def _check_alert_rules(self):
         """Check all alert rules against current metrics."""
-        
+
         for rule_name, rule in self.alert_rules.items():
             if not rule["enabled"]:
                 continue
-            
+
             metric_name = rule["metric_name"]
             if metric_name not in self.metrics or not self.metrics[metric_name]:
                 continue
-            
+
             # Get recent data points within window
             window_seconds = rule["window_minutes"] * 60
             current_time = time.time()
-            
+
             recent_points = [
                 point for point in self.metrics[metric_name]
                 if current_time - point.timestamp <= window_seconds
             ]
-            
+
             if not recent_points:
                 continue
-            
+
             # Calculate current value (average over window)
             current_value = np.mean([point.value for point in recent_points])
-            
+
             # Check condition
             should_alert = self._evaluate_alert_condition(
                 current_value, rule["condition"], rule["threshold"]
             )
-            
+
             alert_key = f"{rule_name}_{metric_name}"
-            
+
             if should_alert and alert_key not in self.active_alerts:
                 # Create new alert
                 alert = Alert(
@@ -422,24 +421,24 @@ class IntelligentObservabilityPlatform:
                     correlation_id=None,
                     metadata={"rule": rule_name, "window_minutes": rule["window_minutes"]}
                 )
-                
+
                 self.active_alerts[alert_key] = alert
                 self.alert_history.append(alert)
-                
+
                 # Notify callbacks
                 for callback in self.alert_callbacks:
                     try:
                         callback(alert)
                     except Exception as e:
                         self.logger.error(f"Error in alert callback: {str(e)}")
-                
+
                 self.logger.warning(f"Alert triggered: {alert.title}")
-            
+
             elif not should_alert and alert_key in self.active_alerts:
                 # Resolve alert
                 resolved_alert = self.active_alerts.pop(alert_key)
                 self.logger.info(f"Alert resolved: {resolved_alert.title}")
-    
+
     def _evaluate_alert_condition(self, value: float, condition: str, threshold: float) -> bool:
         """Evaluate alert condition."""
         if condition == "gt":
@@ -452,12 +451,12 @@ class IntelligentObservabilityPlatform:
             return abs(value - threshold) >= 0.001
         else:
             return False
-    
+
     def _generate_suggested_actions(self, rule_name: str, metric_name: str) -> List[str]:
         """Generate suggested actions for an alert."""
-        
+
         actions = ["Check system logs for errors"]
-        
+
         if "cpu" in metric_name.lower():
             actions.extend([
                 "Check for resource-intensive processes",
@@ -482,58 +481,58 @@ class IntelligentObservabilityPlatform:
                 "Review load balancing configuration",
                 "Consider horizontal scaling"
             ])
-        
+
         return actions
-    
+
     async def _detect_anomalies(self):
         """Detect anomalies in metric data using statistical methods."""
-        
+
         for metric_name, detector_config in self.anomaly_detectors.items():
             if not detector_config["enabled"] or metric_name not in self.metrics:
                 continue
-            
+
             try:
                 anomalies = await self._analyze_metric_for_anomalies(metric_name, detector_config)
                 self.detected_anomalies.extend(anomalies)
-                
+
                 # Generate alerts for high-confidence anomalies
                 for anomaly in anomalies:
                     if anomaly.confidence > 0.8:
                         await self._create_anomaly_alert(anomaly)
-                        
+
             except Exception as e:
                 self.logger.error(f"Error detecting anomalies for {metric_name}: {str(e)}")
-    
-    async def _analyze_metric_for_anomalies(self, 
-                                          metric_name: str, 
+
+    async def _analyze_metric_for_anomalies(self,
+                                          metric_name: str,
                                           detector_config: Dict[str, Any]) -> List[Anomaly]:
         """Analyze a specific metric for anomalies."""
-        
+
         data_points = list(self.metrics[metric_name])
         if len(data_points) < 30:  # Need minimum data for analysis
             return []
-        
+
         # Extract values and timestamps
         values = [point.value for point in data_points[-100:]]  # Last 100 points
         timestamps = [point.timestamp for point in data_points[-100:]]
-        
+
         anomalies = []
-        
+
         # Statistical anomaly detection using z-score
         if len(values) > 10:
             mean_val = np.mean(values[:-1])  # Exclude current point
             std_val = np.std(values[:-1])
-            
+
             if std_val > 0:
                 current_value = values[-1]
                 z_score = abs((current_value - mean_val) / std_val)
-                
+
                 # Threshold based on sensitivity
                 threshold = 3.0 - (detector_config["sensitivity"] * 2.0)  # 1.0 to 3.0 range
-                
+
                 if z_score > threshold:
                     anomaly_type = AnomalyType.SPIKE if current_value > mean_val else AnomalyType.DROP
-                    
+
                     anomaly = Anomaly(
                         anomaly_id=f"anomaly_{int(time.time() * 1000)}",
                         timestamp=timestamps[-1],
@@ -552,17 +551,17 @@ class IntelligentObservabilityPlatform:
                             "baseline_std": std_val
                         }
                     )
-                    
+
                     anomalies.append(anomaly)
-        
+
         # Trend change detection
         if len(values) >= 20:
             trend_anomaly = self._detect_trend_change(values, timestamps, metric_name)
             if trend_anomaly:
                 anomalies.append(trend_anomaly)
-        
+
         return anomalies
-    
+
     def _determine_anomaly_severity(self, z_score: float) -> AlertSeverity:
         """Determine anomaly severity based on statistical significance."""
         if z_score > 4.0:
@@ -573,47 +572,47 @@ class IntelligentObservabilityPlatform:
             return AlertSeverity.WARNING
         else:
             return AlertSeverity.INFO
-    
+
     def _detect_trend_change(self, values: List[float], timestamps: List[float], metric_name: str) -> Optional[Anomaly]:
         """Detect significant trend changes in time series data."""
-        
+
         if len(values) < 20:
             return None
-        
+
         # Split data into two halves
         mid_point = len(values) // 2
         first_half = values[:mid_point]
         second_half = values[mid_point:]
-        
+
         # Calculate trends (simple linear regression slopes)
         def calculate_slope(y_vals):
             x_vals = list(range(len(y_vals)))
             n = len(x_vals)
             if n < 2:
                 return 0
-            
+
             sum_x = sum(x_vals)
             sum_y = sum(y_vals)
             sum_xy = sum(x_vals[i] * y_vals[i] for i in range(n))
             sum_x2 = sum(x * x for x in x_vals)
-            
+
             denominator = n * sum_x2 - sum_x * sum_x
             if denominator == 0:
                 return 0
-            
+
             return (n * sum_xy - sum_x * sum_y) / denominator
-        
+
         slope1 = calculate_slope(first_half)
         slope2 = calculate_slope(second_half)
-        
+
         # Detect significant trend change
         slope_change = abs(slope2 - slope1)
         mean_value = np.mean(values)
-        
+
         # Normalize slope change by mean value to get relative change
         if mean_value > 0:
             relative_change = slope_change / mean_value
-            
+
             if relative_change > 0.1:  # 10% threshold
                 return Anomaly(
                     anomaly_id=f"trend_{int(time.time() * 1000)}",
@@ -632,14 +631,14 @@ class IntelligentObservabilityPlatform:
                         "relative_change": relative_change
                     }
                 )
-        
+
         return None
-    
+
     async def _create_anomaly_alert(self, anomaly: Anomaly):
         """Create an alert for a detected anomaly."""
-        
+
         alert_key = f"anomaly_{anomaly.metric_name}_{anomaly.anomaly_type.value}"
-        
+
         if alert_key not in self.active_alerts:
             alert = Alert(
                 alert_id=f"anomaly_alert_{int(time.time() * 1000)}",
@@ -660,90 +659,90 @@ class IntelligentObservabilityPlatform:
                 correlation_id=anomaly.anomaly_id,
                 metadata={"anomaly": asdict(anomaly)}
             )
-            
+
             self.active_alerts[alert_key] = alert
             self.alert_history.append(alert)
-            
+
             self.logger.warning(f"Anomaly alert: {alert.title}")
-    
+
     async def _update_correlations(self):
         """Update correlation matrix between metrics."""
-        
+
         metric_names = list(self.metrics.keys())
-        
+
         for i, metric1 in enumerate(metric_names):
             for metric2 in metric_names[i+1:]:
                 correlation = await self._calculate_correlation(metric1, metric2)
                 if correlation is not None:
                     self.correlation_matrix[(metric1, metric2)] = correlation
-    
+
     async def _calculate_correlation(self, metric1: str, metric2: str) -> Optional[float]:
         """Calculate correlation between two metrics."""
-        
+
         # Get synchronized data points (same timestamps)
         data1 = list(self.metrics[metric1])
         data2 = list(self.metrics[metric2])
-        
+
         if len(data1) < 10 or len(data2) < 10:
             return None
-        
+
         # Find common timestamps (within 1 second tolerance)
         common_points = []
-        
+
         for point1 in data1[-100:]:  # Last 100 points
             for point2 in data2:
                 if abs(point1.timestamp - point2.timestamp) <= 1.0:
                     common_points.append((point1.value, point2.value))
                     break
-        
+
         if len(common_points) < 10:
             return None
-        
+
         # Calculate Pearson correlation
         values1 = [p[0] for p in common_points]
         values2 = [p[1] for p in common_points]
-        
+
         try:
             correlation = np.corrcoef(values1, values2)[0, 1]
             return correlation if not np.isnan(correlation) else None
         except Exception:
             return None
-    
+
     async def _calculate_slo_compliance(self):
         """Calculate SLO compliance for all defined SLOs."""
-        
+
         current_time = time.time()
-        
+
         for slo_name, slo in self.slos.items():
             try:
                 # Calculate SLI value
                 sli_value = await self._calculate_sli(slo.sli)
-                
+
                 # Store SLO history
                 self.slo_history[slo_name].append((current_time, sli_value))
-                
+
                 # Keep only relevant history (within time window)
                 window_seconds = slo.time_window_days * 24 * 3600
                 self.slo_history[slo_name] = [
                     (ts, val) for ts, val in self.slo_history[slo_name]
                     if current_time - ts <= window_seconds
                 ]
-                
+
                 # Check if SLO is being met
                 if sli_value < slo.target:
                     # SLO breach - create alert
                     await self._create_slo_alert(slo, sli_value)
-                
+
             except Exception as e:
                 self.logger.error(f"Error calculating SLO compliance for {slo_name}: {str(e)}")
-    
+
     async def _calculate_sli(self, sli: SLI) -> float:
         """Calculate Service Level Indicator value."""
-        
+
         # Simplified SLI calculation - in production, use actual query engine
         window_seconds = sli.window_minutes * 60
         current_time = time.time()
-        
+
         # Mock SLI calculation based on error rate
         if "error" in sli.name.lower():
             # Error rate SLI
@@ -752,28 +751,28 @@ class IntelligentObservabilityPlatform:
                     point for point in self.metrics["application.errors.total"]
                     if current_time - point.timestamp <= window_seconds
                 ]
-                
+
                 if "application.requests.total" in self.metrics:
                     request_points = [
                         point for point in self.metrics["application.requests.total"]
                         if current_time - point.timestamp <= window_seconds
                     ]
-                    
+
                     if error_points and request_points:
                         error_rate = sum(p.value for p in error_points) / sum(p.value for p in request_points)
                         return (1.0 - error_rate) * 100  # Convert to success rate percentage
-        
+
         # Default to a reasonable value
         return 99.0  # 99% default SLI
-    
+
     async def _create_slo_alert(self, slo: SLO, current_sli: float):
         """Create an alert for SLO breach."""
-        
+
         alert_key = f"slo_breach_{slo.name}"
-        
+
         if alert_key not in self.active_alerts:
             error_budget = slo.target - current_sli
-            
+
             alert = Alert(
                 alert_id=f"slo_alert_{int(time.time() * 1000)}",
                 timestamp=time.time(),
@@ -793,22 +792,22 @@ class IntelligentObservabilityPlatform:
                 correlation_id=None,
                 metadata={"slo": asdict(slo), "error_budget": error_budget}
             )
-            
+
             self.active_alerts[alert_key] = alert
             self.alert_history.append(alert)
-            
+
             self.logger.error(f"SLO breach alert: {alert.title}")
-    
+
     async def _update_baselines(self):
         """Update performance baselines for metrics."""
-        
+
         for metric_name, data_points in self.metrics.items():
             if len(data_points) < 100:  # Need sufficient data
                 continue
-            
+
             # Calculate baseline statistics
             values = [point.value for point in data_points]
-            
+
             self.performance_baselines[metric_name] = {
                 "mean": np.mean(values),
                 "median": np.median(values),
@@ -819,30 +818,30 @@ class IntelligentObservabilityPlatform:
                 "p99": np.percentile(values, 99),
                 "updated_at": time.time()
             }
-    
+
     def get_dashboard_data(self) -> Dict[str, Any]:
         """Get comprehensive dashboard data."""
-        
+
         current_time = time.time()
-        
+
         # Current metric values
         current_metrics = {}
         for metric_name, data_points in self.metrics.items():
             if data_points:
                 current_metrics[metric_name] = data_points[-1].value
-        
+
         # Recent alerts (last 24 hours)
         recent_alerts = [
             asdict(alert) for alert in self.alert_history
             if current_time - alert.timestamp <= 86400
         ]
-        
+
         # Recent anomalies (last 24 hours)
         recent_anomalies = [
             asdict(anomaly) for anomaly in self.detected_anomalies
             if current_time - anomaly.timestamp <= 86400
         ]
-        
+
         # SLO compliance
         slo_compliance = {}
         for slo_name, slo in self.slos.items():
@@ -855,7 +854,7 @@ class IntelligentObservabilityPlatform:
                     "compliance": current_sli >= slo.target,
                     "error_budget": slo.target - current_sli
                 }
-        
+
         return {
             "timestamp": current_time,
             "current_metrics": current_metrics,
@@ -870,20 +869,20 @@ class IntelligentObservabilityPlatform:
             "system_health": self._calculate_system_health(),
             "performance_baselines": self.performance_baselines
         }
-    
+
     def _calculate_system_health(self) -> Dict[str, Any]:
         """Calculate overall system health score."""
-        
+
         health_score = 100.0
         health_factors = []
-        
+
         # Factor in active critical alerts
-        critical_alerts = sum(1 for alert in self.active_alerts.values() 
+        critical_alerts = sum(1 for alert in self.active_alerts.values()
                             if alert.severity == AlertSeverity.CRITICAL)
         if critical_alerts > 0:
             health_score -= critical_alerts * 20
             health_factors.append(f"{critical_alerts} critical alerts")
-        
+
         # Factor in error rate
         if "application.errors.total" in self.metrics and self.metrics["application.errors.total"]:
             recent_errors = len([
@@ -893,20 +892,20 @@ class IntelligentObservabilityPlatform:
             if recent_errors > 10:
                 health_score -= min(30, recent_errors * 2)
                 health_factors.append(f"{recent_errors} recent errors")
-        
+
         # Factor in SLO compliance
         slo_breaches = 0
         for slo_name, slo in self.slos.items():
             history = self.slo_history.get(slo_name, [])
             if history and history[-1][1] < slo.target:
                 slo_breaches += 1
-        
+
         if slo_breaches > 0:
             health_score -= slo_breaches * 15
             health_factors.append(f"{slo_breaches} SLO breaches")
-        
+
         health_score = max(0, min(100, health_score))
-        
+
         if health_score >= 95:
             status = "excellent"
         elif health_score >= 80:
@@ -915,7 +914,7 @@ class IntelligentObservabilityPlatform:
             status = "degraded"
         else:
             status = "critical"
-        
+
         return {
             "score": health_score,
             "status": status,
@@ -927,10 +926,10 @@ class IntelligentObservabilityPlatform:
 async def demo_observability_platform():
     """Demonstrate the enhanced observability platform."""
     logger = get_logger("agent_etl.observability.demo")
-    
+
     # Initialize platform
     platform = IntelligentObservabilityPlatform()
-    
+
     # Add alert rules
     platform.add_alert_rule(
         "high_cpu_usage",
@@ -940,7 +939,7 @@ async def demo_observability_platform():
         AlertSeverity.WARNING,
         window_minutes=5
     )
-    
+
     platform.add_alert_rule(
         "high_error_rate",
         "application.errors.total",
@@ -949,11 +948,11 @@ async def demo_observability_platform():
         AlertSeverity.ERROR,
         window_minutes=1
     )
-    
+
     # Add anomaly detectors
     platform.add_anomaly_detector("system.cpu.utilization", sensitivity=0.7)
     platform.add_anomaly_detector("application.requests.duration", sensitivity=0.8)
-    
+
     # Add SLO
     availability_sli = SLI(
         name="availability",
@@ -964,7 +963,7 @@ async def demo_observability_platform():
         threshold=0.99,
         window_minutes=5
     )
-    
+
     availability_slo = SLO(
         name="service_availability",
         description="Service should be available 99.9% of the time",
@@ -973,18 +972,18 @@ async def demo_observability_platform():
         time_window_days=30,
         error_budget_policy="burn_rate_alerting"
     )
-    
+
     platform.add_slo(availability_slo)
-    
+
     # Add alert callback
     def alert_callback(alert: Alert):
         logger.warning(f"ALERT: {alert.title} - {alert.description}")
-    
+
     platform.register_alert_callback(alert_callback)
-    
+
     # Start monitoring
     await platform.start_monitoring()
-    
+
     try:
         # Simulate metrics over time
         for i in range(100):
@@ -992,28 +991,28 @@ async def demo_observability_platform():
             base_cpu = 50 + 20 * math.sin(i / 10)  # Cyclical pattern
             if i > 80:  # Simulate spike
                 base_cpu += 40
-            
+
             platform.record_metric("system.cpu.utilization", base_cpu)
             platform.record_metric("system.memory.utilization", 60 + 10 * math.sin(i / 15))
             platform.record_metric("application.requests.total", 100 + i * 2)
             platform.record_metric("application.errors.total", max(0, (base_cpu - 70) / 10))  # Errors correlate with CPU
             platform.record_metric("application.requests.duration", 0.1 + (base_cpu / 1000))
-            
+
             await asyncio.sleep(0.1)  # 100ms intervals
-            
+
             # Print dashboard data every 20 iterations
             if i % 20 == 0:
                 dashboard = platform.get_dashboard_data()
                 logger.info(f"Iteration {i}: System Health = {dashboard['system_health']['score']:.1f}")
-        
+
         # Wait for final analysis
         await asyncio.sleep(2)
-        
+
         # Get final dashboard data
         final_dashboard = platform.get_dashboard_data()
         logger.info("Final Dashboard Data:")
         logger.info(json.dumps(final_dashboard, indent=2, default=str))
-        
+
     finally:
         await platform.stop_monitoring()
 
