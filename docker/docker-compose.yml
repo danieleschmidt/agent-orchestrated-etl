@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  agent-etl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agent-orchestrated-etl
+    environment:
+      - PYTHONPATH=/app/src
+      - AGENT_ETL_LOG_LEVEL=INFO
+      - AGENT_ETL_LOG_FORMAT=json
+      - AGENT_ETL_ENABLE_METRICS=true
+      - AGENT_ETL_ENABLE_SECURITY=true
+      - AGENT_ETL_ENABLE_QUANTUM=false
+      - AGENT_ETL_ENABLE_ADAPTIVE=true
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "from agent_orchestrated_etl.health_monitor import health_checker; exit(0 if health_checker.check_system_health()['overall_status'] == 'healthy' else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - agent-etl-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-etl-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - agent-etl-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: agent-etl-postgres
+    environment:
+      - POSTGRES_DB=agent_etl
+      - POSTGRES_USER=agent_etl_user
+      - POSTGRES_PASSWORD=secure_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - agent-etl-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: agent-etl-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - agent-etl-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: agent-etl-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin_password_change_me
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    restart: unless-stopped
+    networks:
+      - agent-etl-network
+
+volumes:
+  redis-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  agent-etl-network:
+    driver: bridge

@@ -1,0 +1,144 @@
+{
+  "suite_name": "Agent-Orchestrated-ETL Performance Suite",
+  "timestamp": "2025-08-21T06:17:27.824792",
+  "results": [
+    {
+      "name": "ETL Pipeline Throughput",
+      "duration_seconds": 0.8922340869903564,
+      "memory_peak_mb": 0.043193817138671875,
+      "memory_current_mb": 0.00249481201171875,
+      "cpu_percent": 1.0,
+      "throughput_ops_per_sec": 13.449385284615,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "operation_count": 12,
+        "memory_samples": [
+          23.65625,
+          23.97265625
+        ],
+        "cpu_samples": [
+          0.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "name": "Agent Coordination",
+      "duration_seconds": 0.40790224075317383,
+      "memory_peak_mb": 0.046520233154296875,
+      "memory_current_mb": 0.008072853088378906,
+      "cpu_percent": 0.0,
+      "throughput_ops_per_sec": 220.64110222542269,
+      "success_rate": 0.8888888888888888,
+      "error_count": 10,
+      "metadata": {
+        "operation_count": 90,
+        "memory_samples": [
+          23.97265625
+        ],
+        "cpu_samples": [
+          0.0
+        ]
+      }
+    },
+    {
+      "name": "Memory Usage Patterns",
+      "duration_seconds": 0.7652900218963623,
+      "memory_peak_mb": 10.003854751586914,
+      "memory_current_mb": 1.0020685195922852,
+      "cpu_percent": 5.45,
+      "throughput_ops_per_sec": 1450.4305142375413,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "operation_count": 1110,
+        "memory_samples": [
+          23.97265625,
+          33.76953125
+        ],
+        "cpu_samples": [
+          4.9,
+          6.0
+        ]
+      }
+    },
+    {
+      "name": "Concurrent Operations",
+      "duration_seconds": 1.0371856689453125,
+      "memory_peak_mb": 0.09810352325439453,
+      "memory_current_mb": 0.05078887939453125,
+      "cpu_percent": 25.433333333333334,
+      "throughput_ops_per_sec": 192.82950583319848,
+      "success_rate": 1.0,
+      "error_count": 0,
+      "metadata": {
+        "operation_count": 200,
+        "memory_samples": [
+          26.2265625,
+          26.2265625,
+          26.2265625
+        ],
+        "cpu_samples": [
+          11.3,
+          13.9,
+          51.1
+        ]
+      }
+    },
+    {
+      "name": "Database Operations",
+      "duration_seconds": 1.4847745895385742,
+      "memory_peak_mb": 0.0428009033203125,
+      "memory_current_mb": 0.002109527587890625,
+      "cpu_percent": 16.866666666666667,
+      "throughput_ops_per_sec": 252.56358954562884,
+      "success_rate": 0.9706666666666667,
+      "error_count": 11,
+      "metadata": {
+        "operation_count": 375,
+        "memory_samples": [
+          26.2265625,
+          26.2265625,
+          26.2265625
+        ],
+        "cpu_samples": [
+          38.6,
+          4.0,
+          8.0
+        ]
+      }
+    }
+  ],
+  "system_info": {
+    "cpu_count": 1,
+    "cpu_count_logical": 2,
+    "cpu_freq": {
+      "current": 2000.176,
+      "min": 0.0,
+      "max": 0.0
+    },
+    "memory_total_gb": 3.8496856689453125,
+    "memory_available_gb": 3.2484359741210938,
+    "disk_usage_gb": 23.427631378173828,
+    "python_implementation": "CPython",
+    "benchmark_timestamp": "2025-08-21T06:17:32.416587"
+  },
+  "summary": {
+    "total_benchmarks": 5,
+    "total_operations": 1787,
+    "total_errors": 21,
+    "overall_success_rate": 0.9719111111111111,
+    "average_throughput_ops_per_sec": 425.98281942528126,
+    "peak_memory_usage_mb": 10.003854751586914,
+    "average_cpu_percent": 9.75,
+    "benchmark_names": [
+      "ETL Pipeline Throughput",
+      "Agent Coordination",
+      "Memory Usage Patterns",
+      "Concurrent Operations",
+      "Database Operations"
+    ],
+    "performance_grade": "A"
+  }
+}

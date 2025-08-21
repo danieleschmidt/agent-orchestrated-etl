@@ -1,0 +1,80 @@
+{
+  "project": "agent-orchestrated-etl",
+  "scan_timestamp": "2025-08-21T06:17:54.181417",
+  "scan_id": "3366fa85",
+  "scans": {
+    "python_packages": {
+      "source": "python-packages",
+      "timestamp": "2025-08-21T06:17:37.970105",
+      "vulnerabilities": [],
+      "summary": {
+        "total": 0,
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
+    "container_images": {
+      "source": "container-images",
+      "timestamp": "2025-08-21T06:17:43.678508",
+      "images": [],
+      "summary": {
+        "total_images": 0,
+        "total_vulnerabilities": 0
+      },
+      "error": "Trivy not available - install with: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh"
+    },
+    "code_security": {
+      "source": "code-security",
+      "timestamp": "2025-08-21T06:17:43.680338",
+      "bandit_results": {},
+      "semgrep_results": {
+        "error": "Semgrep not available"
+      },
+      "summary": {
+        "total_issues": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
+    "license_compliance": {
+      "source": "license-compliance",
+      "timestamp": "2025-08-21T06:17:54.180712",
+      "packages": [],
+      "compliance_issues": [],
+      "allowed_licenses": [
+        "MIT",
+        "Apache-2.0",
+        "BSD-3-Clause",
+        "BSD-2-Clause",
+        "ISC"
+      ],
+      "summary": {
+        "total_packages": 0,
+        "compliant": 0,
+        "non_compliant": 0,
+        "unknown": 0
+      },
+      "error": "pip-licenses not available - install with: pip install pip-licenses"
+    }
+  },
+  "overall_summary": {
+    "total_vulnerabilities": 0,
+    "critical_issues": 0,
+    "compliance_issues": 0,
+    "scan_coverage": {
+      "python_packages": "completed",
+      "containers": "failed",
+      "code_security": "completed",
+      "licenses": "partial"
+    }
+  },
+  "recommendations": [
+    "Enable automated dependency updates with Dependabot",
+    "Implement security scanning in CI/CD pipeline",
+    "Regular security training for development team",
+    "Consider implementing SLSA compliance framework"
+  ]
+}

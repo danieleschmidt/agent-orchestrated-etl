@@ -33,9 +33,9 @@ except ImportError:
     _PRODUCTION_AVAILABLE = False
 
 try:
-    from . import quantum_planner, adaptive_resources
-    from .quantum_planner import QuantumPipelineOrchestrator, QuantumTaskPlanner
+    from . import adaptive_resources, quantum_planner
     from .adaptive_resources import AdaptiveResourceManager
+    from .quantum_planner import QuantumPipelineOrchestrator, QuantumTaskPlanner
     _QUANTUM_AVAILABLE = True
     _ADAPTIVE_AVAILABLE = True
 except ImportError:
@@ -92,6 +92,6 @@ if _ENHANCED_AVAILABLE:
     __all__.extend([
         "enhanced_orchestrator",
         "DataPipeline",
-        "EnhancedDataOrchestrator", 
+        "EnhancedDataOrchestrator",
         "PipelineConfig"
     ])

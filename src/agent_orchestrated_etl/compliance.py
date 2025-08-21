@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set
 
-from .exceptions import ComplianceException, SecurityException
 from .logging_config import get_audit_logger, get_logger
 
 
@@ -112,22 +110,22 @@ class ComplianceManager:
         """Initialize compliance manager."""
         self.logger = get_logger("agent_etl.compliance")
         self.audit_logger = get_audit_logger()
-        
+
         # Data retention policies
         self.retention_policies: Dict[DataClassification, DataRetentionPolicy] = {}
-        
+
         # Consent management
         self.consent_records: Dict[str, ConsentRecord] = {}
-        
+
         # Data processing records
         self.processing_records: Dict[str, DataProcessingRecord] = {}
-        
+
         # Audit events
         self.audit_events: List[AuditEvent] = []
-        
+
         # Active compliance standards
         self.active_standards: Set[ComplianceStandard] = set()
-        
+
         # Initialize default policies
         self._initialize_default_policies()
 
@@ -184,10 +182,10 @@ class ComplianceManager:
                 backup_retention_days=30
             )
         }
-        
+
         for classification, policy in default_policies.items():
             self.retention_policies[classification] = policy
-        
+
         self.logger.info("Initialized default compliance policies")
 
     def enable_compliance_standard(self, standard: ComplianceStandard) -> None:
@@ -197,7 +195,7 @@ class ComplianceManager:
             standard: Compliance standard to enable
         """
         self.active_standards.add(standard)
-        
+
         # Apply standard-specific configurations
         if standard == ComplianceStandard.GDPR:
             self._configure_gdpr_compliance()
@@ -207,7 +205,7 @@ class ComplianceManager:
             self._configure_pci_compliance()
         elif standard == ComplianceStandard.CCPA:
             self._configure_ccpa_compliance()
-        
+
         self.logger.info(f"Enabled compliance standard: {standard.value}")
         self.audit_compliance_event("compliance_standard_enabled", {"standard": standard.value})
 
@@ -219,7 +217,7 @@ class ComplianceManager:
             policy.retention_period_days = min(policy.retention_period_days, 730)  # 2 years max
             policy.auto_delete = True
             policy.encryption_required = True
-        
+
         self.logger.info("Applied GDPR compliance configuration")
 
     def _configure_hipaa_compliance(self) -> None:
@@ -230,7 +228,7 @@ class ComplianceManager:
             policy.retention_period_days = 2190  # 6 years minimum
             policy.encryption_required = True
             policy.backup_retention_days = 90
-        
+
         self.logger.info("Applied HIPAA compliance configuration")
 
     def _configure_pci_compliance(self) -> None:
@@ -241,7 +239,7 @@ class ComplianceManager:
             policy.retention_period_days = 365  # 1 year maximum
             policy.auto_delete = True
             policy.encryption_required = True
-        
+
         self.logger.info("Applied PCI-DSS compliance configuration")
 
     def _configure_ccpa_compliance(self) -> None:
@@ -251,7 +249,7 @@ class ComplianceManager:
             policy = self.retention_policies[DataClassification.PII]
             policy.auto_delete = True
             policy.encryption_required = True
-        
+
         self.logger.info("Applied CCPA compliance configuration")
 
     def classify_data(self, data: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> DataClassification:
@@ -266,22 +264,22 @@ class ComplianceManager:
         """
         # Analyze data content for sensitive patterns
         data_str = json.dumps(data, default=str).lower()
-        
+
         # Check for PHI indicators
         phi_patterns = ['ssn', 'social_security', 'medical', 'health', 'diagnosis', 'treatment', 'patient']
         if any(pattern in data_str for pattern in phi_patterns):
             return DataClassification.PHI
-        
+
         # Check for PCI indicators
         pci_patterns = ['credit_card', 'card_number', 'cvv', 'expiry', 'cardholder']
         if any(pattern in data_str for pattern in pci_patterns):
             return DataClassification.PCI
-        
+
         # Check for PII indicators
         pii_patterns = ['email', 'phone', 'address', 'name', 'birthday', 'birth_date', 'personal']
         if any(pattern in data_str for pattern in pii_patterns):
             return DataClassification.PII
-        
+
         # Check context for classification hints
         if context:
             classification_hint = context.get('classification')
@@ -290,7 +288,7 @@ class ComplianceManager:
                     return DataClassification(classification_hint.lower())
                 except ValueError:
                     pass
-        
+
         # Default to internal if no specific classification found
         return DataClassification.INTERNAL
 
@@ -301,7 +299,7 @@ class ComplianceManager:
             consent: Consent record to store
         """
         self.consent_records[consent.consent_id] = consent
-        
+
         self.audit_compliance_event(
             "consent_recorded",
             {
@@ -311,7 +309,7 @@ class ComplianceManager:
                 "status": consent.status.value
             }
         )
-        
+
         self.logger.info(f"Recorded consent: {consent.consent_id} for user {consent.user_id}")
 
     def withdraw_consent(self, consent_id: str, reason: Optional[str] = None) -> bool:
@@ -326,11 +324,11 @@ class ComplianceManager:
         """
         if consent_id not in self.consent_records:
             return False
-        
+
         consent = self.consent_records[consent_id]
         consent.status = ConsentStatus.WITHDRAWN
         consent.withdrawn_at = datetime.utcnow()
-        
+
         self.audit_compliance_event(
             "consent_withdrawn",
             {
@@ -339,7 +337,7 @@ class ComplianceManager:
                 "reason": reason
             }
         )
-        
+
         self.logger.info(f"Withdrawn consent: {consent_id}")
         return True
 
@@ -354,14 +352,14 @@ class ComplianceManager:
             True if valid consent exists
         """
         current_time = datetime.utcnow()
-        
+
         for consent in self.consent_records.values():
             if (consent.user_id == user_id and
                 consent.purpose == purpose and
                 consent.status == ConsentStatus.GRANTED and
                 (consent.expires_at is None or consent.expires_at > current_time)):
                 return True
-        
+
         return False
 
     def record_data_processing(self, record: DataProcessingRecord) -> None:
@@ -371,7 +369,7 @@ class ComplianceManager:
             record: Data processing record
         """
         self.processing_records[record.record_id] = record
-        
+
         self.audit_compliance_event(
             "data_processing_recorded",
             {
@@ -381,7 +379,7 @@ class ComplianceManager:
                 "data_categories": record.data_categories
             }
         )
-        
+
         self.logger.info(f"Recorded data processing activity: {record.activity_name}")
 
     def get_data_retention_policy(self, classification: DataClassification) -> Optional[DataRetentionPolicy]:
@@ -408,7 +406,7 @@ class ComplianceManager:
         policy = self.get_data_retention_policy(classification)
         if not policy or not policy.auto_delete:
             return False
-        
+
         retention_period = timedelta(days=policy.retention_period_days)
         return datetime.utcnow() - created_at > retention_period
 
@@ -424,10 +422,10 @@ class ComplianceManager:
         """
         if classification in [DataClassification.PII, DataClassification.PHI, DataClassification.PCI]:
             anonymized = data.copy()
-            
+
             # Anonymize common PII fields
             pii_fields = ['email', 'phone', 'ssn', 'social_security_number', 'credit_card', 'name', 'address']
-            
+
             for field in pii_fields:
                 if field in anonymized:
                     if isinstance(anonymized[field], str):
@@ -436,15 +434,15 @@ class ComplianceManager:
                         anonymized[field] = f"anon_{hash_value}"
                     else:
                         anonymized[field] = "[ANONYMIZED]"
-            
+
             # Anonymize email-like patterns
             for key, value in anonymized.items():
                 if isinstance(value, str) and '@' in value and '.' in value:
                     hash_value = hashlib.sha256(value.encode()).hexdigest()[:12]
                     anonymized[key] = f"anon_{hash_value}@example.com"
-            
+
             return anonymized
-        
+
         return data
 
     def audit_compliance_event(self, event_type: str, details: Dict[str, Any]) -> None:
@@ -464,9 +462,9 @@ class ComplianceManager:
             timestamp=datetime.utcnow(),
             additional_data=details
         )
-        
+
         self.audit_events.append(event)
-        
+
         # Log to audit logger
         self.audit_logger.info(
             f"Compliance event: {event_type}",
@@ -494,7 +492,7 @@ class ComplianceManager:
             event for event in self.audit_events
             if start_date <= event.timestamp <= end_date
         ]
-        
+
         report = {
             "standard": standard.value,
             "report_period": {
@@ -519,7 +517,7 @@ class ComplianceManager:
                 for classification, policy in self.retention_policies.items()
             }
         }
-        
+
         # Add standard-specific information
         if standard == ComplianceStandard.GDPR:
             report["gdpr_specific"] = {
@@ -533,7 +531,7 @@ class ComplianceManager:
                 "security_incidents": 0,  # TODO: Implement incident tracking
                 "business_associate_agreements": 0  # TODO: Implement BAA tracking
             }
-        
+
         self.audit_compliance_event(
             "compliance_report_generated",
             {
@@ -541,7 +539,7 @@ class ComplianceManager:
                 "report_period_days": (end_date - start_date).days
             }
         )
-        
+
         return report
 
     def validate_compliance_status(self) -> Dict[str, Any]:
@@ -557,7 +555,7 @@ class ComplianceManager:
             "issues": [],
             "recommendations": []
         }
-        
+
         # Check retention policies
         for classification, policy in self.retention_policies.items():
             if classification in [DataClassification.PII, DataClassification.PHI, DataClassification.PCI]:
@@ -566,29 +564,29 @@ class ComplianceManager:
                         f"Encryption not required for {classification.value} data"
                     )
                     validation_results["overall_status"] = "non_compliant"
-        
+
         # Check for expired consents
         current_time = datetime.utcnow()
         expired_consents = [
             c for c in self.consent_records.values()
             if c.expires_at and c.expires_at < current_time and c.status == ConsentStatus.GRANTED
         ]
-        
+
         if expired_consents:
             validation_results["issues"].append(
                 f"{len(expired_consents)} expired consents still marked as granted"
             )
             validation_results["recommendations"].append("Update expired consent statuses")
-        
+
         # Check for missing data processing records
         if len(self.processing_records) == 0:
             validation_results["recommendations"].append(
                 "Document data processing activities for compliance"
             )
-        
+
         if validation_results["issues"]:
             validation_results["overall_status"] = "non_compliant" if any("required" in issue for issue in validation_results["issues"]) else "partially_compliant"
-        
+
         return validation_results
 
 
@@ -603,10 +601,10 @@ def get_compliance_manager() -> ComplianceManager:
         ComplianceManager instance
     """
     global _compliance_manager
-    
+
     if _compliance_manager is None:
         _compliance_manager = ComplianceManager()
-        
+
         # Enable default compliance standards based on environment
         import os
         enabled_standards = os.getenv("COMPLIANCE_STANDARDS", "").split(",")
@@ -616,5 +614,5 @@ def get_compliance_manager() -> ComplianceManager:
                 _compliance_manager.enable_compliance_standard(standard)
             except ValueError:
                 pass
-    
+
     return _compliance_manager

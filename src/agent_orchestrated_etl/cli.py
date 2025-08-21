@@ -5,11 +5,12 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
 
 from . import data_source_analysis, orchestrator
+from .core import DataQualityValidator
 from .dag_generator import dag_to_airflow_code, generate_dag
 from .data_source_analysis import SUPPORTED_SOURCES, analyze_source
+from .logging_config import get_logger
 from .validation import (
     ValidationError,
     safe_dag_id_type,
@@ -17,8 +18,6 @@ from .validation import (
     safe_source_type,
     sanitize_json_output,
 )
-from .logging_config import get_logger
-from .core import DataQualityValidator
 
 
 def generate_dag_cmd(args: list[str] | None = None) -> int:
@@ -214,18 +213,18 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     elif ns.verbose == 1:
         import logging
         logging.getLogger("agent_etl").setLevel(logging.INFO)
-    
+
     # Load configuration from file if provided
     config = {}
     if ns.config_file:
         try:
-            with open(ns.config_file, 'r') as f:
+            with open(ns.config_file) as f:
                 config = json.load(f)
             logger.info(f"Loaded configuration from {ns.config_file}")
         except Exception as e:
             logger.error(f"Failed to load config file: {e}")
             return 1
-    
+
     monitor = None
     if ns.monitor:
         monitor = orchestrator.MonitorAgent(ns.monitor)
@@ -235,21 +234,21 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
         enable_quantum_planning=ns.quantum_optimize,
         enable_adaptive_resources=ns.adaptive_resources
     )
-    
+
     try:
         # Create pipeline with enhanced options
         pipeline_options = {
             'dag_id': ns.dag_id,
             'timeout': ns.timeout,
         }
-        
+
         # Override with config file settings
         pipeline_options.update(config.get('pipeline', {}))
-        
+
         pipeline = orch.create_pipeline(ns.source, **pipeline_options)
-        
+
         logger.info(f"Created pipeline '{ns.dag_id}' for source '{ns.source}'")
-        
+
     except ValueError as exc:
         if monitor:
             monitor.error(str(exc))
@@ -266,7 +265,7 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
     if ns.dry_run:
         logger.info("Dry run mode: validating pipeline without execution")
         pipeline_status = pipeline.get_status()
-        
+
         validation_results = {
             "status": "validation_complete",
             "pipeline": pipeline_status,
@@ -278,30 +277,30 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
                 "disk": "low"
             }
         }
-        
+
         output_text = json.dumps(validation_results, indent=2)
         if ns.output:
             Path(ns.output).write_text(output_text)
         else:
             print(output_text)
-            
+
         return 0
-    
+
     # Execute pipeline with enhanced monitoring
     try:
         start_time = time.time()
         logger.info(f"Starting pipeline execution: {ns.dag_id}")
-        
+
         # Execute pipeline
         if hasattr(orch, 'execute_pipeline_async') and ns.parallel_workers > 1:
             import asyncio
             results = asyncio.run(orch.execute_pipeline_async(pipeline, monitor))
         else:
             results = pipeline.execute(monitor=monitor)
-            
+
         execution_time = time.time() - start_time
         logger.info(f"Pipeline execution completed in {execution_time:.2f} seconds")
-        
+
         # Add execution metadata
         results['_metadata'] = {
             'execution_time': execution_time,
@@ -314,19 +313,19 @@ def run_pipeline_cmd(args: list[str] | None = None) -> int:
                 'data_quality': ns.data_quality
             }
         }
-        
+
         # Run data quality analysis if requested
         if ns.data_quality:
             logger.info("Running data quality analysis")
             validator = DataQualityValidator()
-            
+
             # Extract data for quality analysis
             for task_id, task_result in results.items():
                 if task_id.startswith('extract') and isinstance(task_result, list):
                     quality_result = validator.validate_data_quality(task_result)
                     results[f'{task_id}_quality'] = quality_result
                     logger.info(f"Quality score for {task_id}: {quality_result['quality_score']:.2f}")
-        
+
     except Exception as exc:  # pragma: no cover - defensive
         if monitor:
             monitor.error(str(exc))
@@ -379,7 +378,7 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
         help="Compare quantum vs standard vs adaptive modes",
     )
     ns = parser.parse_args(args)
-    
+
     logger = get_logger("agent_etl.benchmark")
     results = {
         "source": ns.source,
@@ -387,7 +386,7 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
         "timestamp": time.time(),
         "benchmarks": []
     }
-    
+
     modes = []
     if ns.compare_modes:
         modes = [
@@ -398,7 +397,7 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
         ]
     else:
         modes = [{"name": "default", "quantum": False, "adaptive": False}]
-    
+
     for mode in modes:
         logger.info(f"Benchmarking mode: {mode['name']}")
         mode_results = {
@@ -407,33 +406,33 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
             "iterations": [],
             "statistics": {}
         }
-        
+
         execution_times = []
-        
+
         for i in range(ns.iterations):
             logger.info(f"Running iteration {i+1}/{ns.iterations}")
-            
+
             orch = orchestrator.DataOrchestrator(
                 enable_quantum_planning=mode["quantum"],
                 enable_adaptive_resources=mode["adaptive"]
             )
-            
+
             start_time = time.time()
             try:
                 pipeline = orch.create_pipeline(ns.source)
                 results_data = pipeline.execute()
                 execution_time = time.time() - start_time
-                
+
                 iteration_result = {
                     "iteration": i + 1,
                     "execution_time": execution_time,
                     "status": "success",
                     "records_processed": len(results_data.get('extract', [])) if 'extract' in results_data else 0
                 }
-                
+
                 execution_times.append(execution_time)
                 mode_results["iterations"].append(iteration_result)
-                
+
             except Exception as e:
                 logger.error(f"Iteration {i+1} failed: {e}")
                 mode_results["iterations"].append({
@@ -441,7 +440,7 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
                     "status": "failed",
                     "error": str(e)
                 })
-        
+
         # Calculate statistics
         if execution_times:
             mode_results["statistics"] = {
@@ -451,9 +450,9 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
                 "success_rate": (len(execution_times) / ns.iterations) * 100,
                 "throughput_per_minute": 60 / (sum(execution_times) / len(execution_times)) if execution_times else 0
             }
-        
+
         results["benchmarks"].append(mode_results)
-    
+
     # Output results
     output_text = json.dumps(results, indent=2)
     if ns.output:
@@ -461,7 +460,7 @@ def benchmark_cmd(args: list[str] | None = None) -> int:
         logger.info(f"Benchmark results written to {ns.output}")
     else:
         print(output_text)
-    
+
     return 0
 
 
@@ -489,7 +488,7 @@ def validate_cmd(args: list[str] | None = None) -> int:
         help="Enable strict validation mode",
     )
     ns = parser.parse_args(args)
-    
+
     logger = get_logger("agent_etl.validate")
     validation_results = {
         "source": ns.source,
@@ -497,7 +496,7 @@ def validate_cmd(args: list[str] | None = None) -> int:
         "validation_status": "passed",
         "checks": []
     }
-    
+
     # Validate data source
     try:
         logger.info(f"Validating data source: {ns.source}")
@@ -515,18 +514,18 @@ def validate_cmd(args: list[str] | None = None) -> int:
             "message": str(e)
         })
         validation_results["validation_status"] = "failed"
-    
+
     # Validate configuration file
     if ns.config_file:
         try:
             logger.info(f"Validating config file: {ns.config_file}")
-            with open(ns.config_file, 'r') as f:
+            with open(ns.config_file) as f:
                 config = json.load(f)
-            
+
             # Basic config validation
             required_sections = ['pipeline', 'source', 'destination']
             missing_sections = [s for s in required_sections if s not in config]
-            
+
             if missing_sections:
                 validation_results["checks"].append({
                     "check": "config_structure",
@@ -539,7 +538,7 @@ def validate_cmd(args: list[str] | None = None) -> int:
                     "status": "passed",
                     "message": "Configuration structure is valid"
                 })
-                
+
         except Exception as e:
             validation_results["checks"].append({
                 "check": "config_file_validation",
@@ -547,13 +546,13 @@ def validate_cmd(args: list[str] | None = None) -> int:
                 "message": str(e)
             })
             validation_results["validation_status"] = "failed"
-    
+
     # Try to create pipeline
     try:
         logger.info("Validating pipeline creation")
         orch = orchestrator.DataOrchestrator()
         pipeline = orch.create_pipeline(ns.source)
-        
+
         # Validate task dependencies
         task_order = pipeline.dag.topological_sort()
         validation_results["checks"].append({
@@ -562,7 +561,7 @@ def validate_cmd(args: list[str] | None = None) -> int:
             "message": f"Pipeline created with {len(task_order)} tasks",
             "task_order": task_order
         })
-        
+
     except Exception as e:
         validation_results["checks"].append({
             "check": "pipeline_creation",
@@ -570,18 +569,18 @@ def validate_cmd(args: list[str] | None = None) -> int:
             "message": str(e)
         })
         validation_results["validation_status"] = "failed"
-    
+
     # Summary
     passed_checks = sum(1 for check in validation_results["checks"] if check["status"] == "passed")
     total_checks = len(validation_results["checks"])
-    
+
     validation_results["summary"] = {
         "total_checks": total_checks,
         "passed_checks": passed_checks,
         "failed_checks": sum(1 for check in validation_results["checks"] if check["status"] == "failed"),
         "warnings": sum(1 for check in validation_results["checks"] if check["status"] == "warning")
     }
-    
+
     # Output results
     output_text = json.dumps(validation_results, indent=2)
     if ns.output:
@@ -589,7 +588,7 @@ def validate_cmd(args: list[str] | None = None) -> int:
         logger.info(f"Validation results written to {ns.output}")
     else:
         print(output_text)
-    
+
     return 0 if validation_results["validation_status"] == "passed" else 1
 
 
@@ -608,18 +607,19 @@ def status_cmd(args: list[str] | None = None) -> int:
         help="Output file for status information",
     )
     ns = parser.parse_args(args)
-    
+
     logger = get_logger("agent_etl.status")
-    
+
     try:
         # Get orchestrator status
         orch = orchestrator.DataOrchestrator()
         orchestrator_status = orch.get_orchestrator_status()
-        
+
         # System information
-        import psutil
         import platform
-        
+
+        import psutil
+
         system_info = {
             "platform": platform.platform(),
             "python_version": platform.python_version(),
@@ -627,7 +627,7 @@ def status_cmd(args: list[str] | None = None) -> int:
             "memory_gb": round(psutil.virtual_memory().total / (1024**3), 2),
             "disk_free_gb": round(psutil.disk_usage('/').free / (1024**3), 2)
         }
-        
+
         status_info = {
             "timestamp": time.time(),
             "system": system_info,
@@ -635,7 +635,7 @@ def status_cmd(args: list[str] | None = None) -> int:
             "health_status": "healthy",  # Would determine based on various factors
             "version": "0.1.0"
         }
-        
+
         # Format output
         if ns.format == "json":
             output_text = json.dumps(status_info, indent=2)
@@ -656,17 +656,17 @@ def status_cmd(args: list[str] | None = None) -> int:
             output_lines.append(f"Memory: {system_info['memory_gb']} GB")
             output_lines.append(f"Disk Free: {system_info['disk_free_gb']} GB")
             output_text = "\n".join(output_lines)
-        
+
         if ns.output:
             Path(ns.output).write_text(output_text)
             logger.info(f"Status information written to {ns.output}")
         else:
             print(output_text)
-            
+
     except Exception as e:
         logger.error(f"Failed to get status: {e}")
         return 1
-    
+
     return 0
 
 
@@ -692,7 +692,7 @@ def main() -> int:
             print("")
             print("Use 'command --help' for command-specific options")
             return 0
-    
+
     return generate_dag_cmd()
 
 
