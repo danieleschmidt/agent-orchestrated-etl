@@ -14,6 +14,7 @@ from .data_models import (
     DataQualityMetrics,
     TransformationRule,
     ValidationRule,
+    FieldSchema,
 )
 from .agent_models import (
     AgentConfiguration,
@@ -34,6 +35,7 @@ __all__ = [
     "DataQualityMetrics",
     "TransformationRule",
     "ValidationRule",
+    "FieldSchema",
     "AgentConfiguration",
     "AgentPerformanceMetrics",
     "WorkflowState",
