@@ -1,0 +1,308 @@
+# Production Deployment Configuration
+# Progressive Quality Gates Autonomous SDLC System
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: progressive-quality-gates-config
+  namespace: agent-orchestrated-etl
+data:
+  # Quality Gates Configuration
+  quality_gates.json: |
+    {
+      "quality_level": "enterprise",
+      "adaptive_thresholds": {
+        "code_coverage": 85.0,
+        "performance_score": 80.0,
+        "security_score": 95.0,
+        "reliability_score": 90.0,
+        "maintainability_score": 85.0,
+        "complexity_score": 80.0,
+        "test_success_rate": 95.0
+      },
+      "auto_quality_gates": true,
+      "fail_fast": false,
+      "quality_gate_phases": ["pre_execution", "post_execution", "continuous"],
+      "metric_collection_interval": 30,
+      "adaptive_learning": true
+    }
+
+  # Circuit Breaker Configuration
+  circuit_breakers.json: |
+    {
+      "default": {
+        "failure_threshold": 0.5,
+        "min_requests_threshold": 10,
+        "timeout_duration": 60.0,
+        "half_open_max_calls": 5,
+        "success_threshold_half_open": 3,
+        "model_accuracy_threshold": 0.7
+      },
+      "services": {
+        "data_source": {
+          "failure_threshold": 0.6,
+          "timeout_duration": 90.0
+        },
+        "external_api": {
+          "failure_threshold": 0.4,
+          "timeout_duration": 30.0
+        },
+        "database": {
+          "failure_threshold": 0.7,
+          "timeout_duration": 120.0
+        }
+      }
+    }
+
+  # Retry Strategy Configuration
+  retry_strategies.json: |
+    {
+      "default": {
+        "max_attempts": 5,
+        "base_delay": 1.0,
+        "max_delay": 300.0,
+        "backoff_multiplier": 2.0,
+        "jitter_factor": 0.1,
+        "exponential_base": 2.0,
+        "timeout_per_attempt": 30.0
+      },
+      "services": {
+        "quick_service": {
+          "max_attempts": 3,
+          "base_delay": 0.5,
+          "backoff_multiplier": 1.5
+        },
+        "slow_service": {
+          "max_attempts": 7,
+          "base_delay": 2.0,
+          "max_delay": 600.0
+        }
+      }
+    }
+
+  # Cache Configuration
+  cache_config.json: |
+    {
+      "default": {
+        "max_memory_mb": 512,
+        "max_disk_mb": 2048,
+        "policy": "adaptive",
+        "compression_threshold": 1024,
+        "default_ttl": 3600,
+        "learning_window": 1000,
+        "prediction_threshold": 0.7
+      },
+      "caches": {
+        "high_performance": {
+          "max_memory_mb": 1024,
+          "policy": "predictive"
+        },
+        "memory_efficient": {
+          "max_memory_mb": 256,
+          "policy": "lru"
+        }
+      }
+    }
+
+  # Resource Scaling Configuration
+  resource_scaling.json: |
+    {
+      "default": {
+        "min_instances": 2,
+        "max_instances": 20,
+        "cpu_scale_up": 0.7,
+        "cpu_scale_down": 0.3,
+        "memory_scale_up": 0.8,
+        "memory_scale_down": 0.4,
+        "response_time_threshold": 2.0,
+        "scale_cooldown": 300,
+        "prediction_horizon": 1800,
+        "model_accuracy_threshold": 0.7
+      },
+      "services": {
+        "web_service": {
+          "min_instances": 3,
+          "max_instances": 15,
+          "cpu_scale_up": 0.6,
+          "prediction_horizon": 600
+        },
+        "batch_processor": {
+          "min_instances": 1,
+          "max_instances": 10,
+          "cpu_scale_up": 0.8,
+          "prediction_horizon": 3600
+        }
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: progressive-quality-gates
+  namespace: agent-orchestrated-etl
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: progressive-quality-gates
+  template:
+    metadata:
+      labels:
+        app: progressive-quality-gates
+    spec:
+      containers:
+      - name: quality-gates
+        image: agent-orchestrated-etl:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: CONFIG_PATH
+          value: "/config"
+        - name: REPORTS_PATH
+          value: "/reports"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+        - name: reports-volume
+          mountPath: /reports
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: config-volume
+        configMap:
+          name: progressive-quality-gates-config
+      - name: reports-volume
+        persistentVolumeClaim:
+          claimName: reports-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: progressive-quality-gates-service
+  namespace: agent-orchestrated-etl
+spec:
+  selector:
+    app: progressive-quality-gates
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: reports-pvc
+  namespace: agent-orchestrated-etl
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: progressive-quality-gates-monitor
+  namespace: agent-orchestrated-etl
+spec:
+  selector:
+    matchLabels:
+      app: progressive-quality-gates
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: progressive-quality-gates-ingress
+  namespace: agent-orchestrated-etl
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  tls:
+  - hosts:
+    - quality-gates.yourdomain.com
+    secretName: quality-gates-tls
+  rules:
+  - host: quality-gates.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: progressive-quality-gates-service
+            port:
+              number: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: progressive-quality-gates-hpa
+  namespace: agent-orchestrated-etl
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: progressive-quality-gates
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
