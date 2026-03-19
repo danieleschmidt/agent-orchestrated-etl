@@ -1,0 +1,12 @@
+id,name,department,salary,email
+1,Alice Johnson,Engineering,95000,alice@example.com
+2,Bob Smith,Marketing,72000,bob@example.com
+3,Carol White ,Engineering,88000,carol@example.com
+4,Dave Brown,HR,65000,dave@example.com
+5,Eve Davis,Engineering,95000,alice@example.com
+2,Bob Smith,Marketing,72000,bob@example.com
+6,Frank Wilson,Marketing,68000,frank@example.com
+7,Grace Lee,Engineering,102000,grace@example.com
+8,,HR,60000,unknown@example.com
+9,Ivan Petrov,Engineering,91000,ivan@example.com
+10,Julia Chen,Marketing,75000,julia@example.com

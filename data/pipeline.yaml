@@ -1,0 +1,24 @@
+pipeline:
+  name: employee-csv-to-json
+  description: "Extract employees from CSV, normalize and deduplicate, load to JSON"
+  max_retries: 2
+  stop_on_failure: true
+  metadata:
+    version: "1.0"
+    owner: "data-team"
+
+  stages:
+    - name: extract-csv
+      role: extractor
+      source: data/sample_employees.csv
+
+    - name: transform-normalize-dedup
+      role: transformer
+      operations:
+        - normalize
+        - deduplicate
+        - drop_nulls
+
+    - name: load-json
+      role: loader
+      destination: output/employees.json
